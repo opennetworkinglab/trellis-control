@@ -1848,10 +1848,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 case CONFIG_ADDED:
                 case CONFIG_UPDATED:
                 case CONFIG_REMOVED:
-                    log.trace("Schedule Network Config event {}", event);
                     if (networkConfigCompletion == null || networkConfigCompletion.isDone()) {
+                        log.debug("Process netcfg {}", event);
                         mainEventExecutor.execute(new InternalEventHandler(event));
                     } else {
+                        log.debug("Queue netcfg {}", event);
                         queuedEvents.add(event);
                     }
                     break;
