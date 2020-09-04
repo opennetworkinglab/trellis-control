@@ -29,7 +29,6 @@ import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.config.Config;
 import org.onosproject.net.config.ConfigApplyDelegate;
-import org.onosproject.segmentrouting.SegmentRoutingManager;
 
 import java.io.InputStream;
 import java.util.Set;
@@ -45,6 +44,7 @@ public class SegmentRoutingAppConfigTest {
     private SegmentRoutingAppConfig invalidConfig;
     private SegmentRoutingAppConfig mplsEcmpConfig;
 
+    private static final String APP_NAME = "org.onosproject.segmentrouting";
     private static final MacAddress ROUTER_MAC_1 = MacAddress.valueOf("00:00:00:00:00:01");
     private static final MacAddress ROUTER_MAC_2 = MacAddress.valueOf("00:00:00:00:00:02");
     private static final MacAddress ROUTER_MAC_3 = MacAddress.valueOf("00:00:00:00:00:03");
@@ -73,7 +73,7 @@ public class SegmentRoutingAppConfigTest {
         InputStream mplsEcmpJsonStream = SegmentRoutingAppConfigTest.class
                 .getResourceAsStream("/app-ecmp.json");
 
-        String key = SegmentRoutingManager.APP_NAME;
+        String key = APP_NAME;
         ApplicationId subject = new TestApplicationId(key);
         ObjectMapper mapper = new ObjectMapper();
         JsonNode jsonNode = mapper.readTree(jsonStream);
