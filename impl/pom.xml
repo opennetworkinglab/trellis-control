@@ -26,30 +26,12 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>segmentrouting-web</artifactId>
+    <artifactId>segmentrouting-impl</artifactId>
     <packaging>bundle</packaging>
     <url>http://trellisfabric.org</url>
-    <description>Trellis control REST API</description>
-
-    <properties>
-        <web.context>/onos/segmentrouting</web.context>
-        <api.version>3.0.0</api.version>
-        <api.title>Segment Routing REST API</api.title>
-        <api.description>
-            REST API for Segment Routing Application
-        </api.description>
-        <api.package>org.onosproject.segmentrouting.web</api.package>
-    </properties>
+    <description>Trellis control implementation</description>
 
     <dependencies>
-        <!-- Trellis impl -->
-        <dependency>
-            <groupId>org.onosproject</groupId>
-            <artifactId>segmentrouting-impl</artifactId>
-            <version>${project.parent.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
         <!-- ONOS core -->
         <dependency>
             <groupId>org.onosproject</groupId>
@@ -71,6 +53,12 @@
         </dependency>
 
         <!-- Other Trellis apps -->
+        <dependency>
+            <groupId>org.onosproject</groupId>
+            <artifactId>segmentrouting-api</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.onosproject</groupId>
             <artifactId>onos-apps-portloadbalancer</artifactId>
@@ -113,6 +101,13 @@
         </dependency>
         <dependency>
             <groupId>org.onosproject</groupId>
+            <artifactId>segmentrouting-api</artifactId>
+            <version>${project.version}</version>
+            <classifier>tests</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.onosproject</groupId>
             <artifactId>onos-apps-route-service-api</artifactId>
             <version>${onos.version}</version>
             <classifier>tests</classifier>
@@ -125,37 +120,21 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- REST API -->
+        <!-- CLI -->
         <dependency>
-            <groupId>org.onosproject</groupId>
-            <artifactId>onos-rest</artifactId>
-            <version>${onos.version}</version>
+            <groupId>org.apache.karaf.shell</groupId>
+            <artifactId>org.apache.karaf.shell.console</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.karaf.shell</groupId>
+            <artifactId>org.apache.karaf.shell.core</artifactId>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.onosproject</groupId>
-            <artifactId>onlab-rest</artifactId>
+            <artifactId>onos-cli</artifactId>
             <version>${onos.version}</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>javax.ws.rs</groupId>
-            <artifactId>javax.ws.rs-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.glassfish.jersey.containers</groupId>
-            <artifactId>jersey-container-servlet</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-annotations</artifactId>
             <scope>provided</scope>
         </dependency>
     </dependencies>
@@ -172,18 +151,7 @@
                 <extensions>true</extensions>
                 <configuration>
                     <instructions>
-                        <_wab>src/main/webapp/</_wab>
-                        <Include-Resource>
-                            WEB-INF/classes/apidoc/swagger.json=target/swagger.json,
-                            {maven-resources}
-                        </Include-Resource>
-                        <Bundle-SymbolicName>
-                            ${project.groupId}.${project.artifactId}
-                        </Bundle-SymbolicName>
-                        <Import-Package>
-                            *,org.glassfish.jersey.servlet
-                        </Import-Package>
-                        <Web-ContextPath>${web.context}</Web-ContextPath>
+                        <Karaf-Commands>org.onosproject.segmentrouting.cli</Karaf-Commands>
                     </instructions>
                 </configuration>
             </plugin>
