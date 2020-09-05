@@ -21,6 +21,7 @@
      featuresRepo="mvn:${project.groupId}/${project.artifactId}/${project.version}/xml/features"
      features="${project.artifactId}" apps="org.onosproject.mcast,org.onosproject.route-service,org.onosproject.portloadbalancer">
     <description>${project.description}</description>
+    <artifact>mvn:${project.groupId}/segmentrouting-api/${project.version}</artifact>
     <artifact>mvn:${project.groupId}/segmentrouting-impl/${project.version}</artifact>
     <artifact>mvn:${project.groupId}/segmentrouting-web/${project.version}</artifact>
 </app>
