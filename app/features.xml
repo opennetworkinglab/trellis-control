@@ -18,7 +18,7 @@
     <feature name="${project.artifactId}" version="${project.version}"
              description="${project.description}">
         <feature>onos-api</feature>
-        <bundle>mvn:${project.groupId}/segmentrouting-app/${project.version}</bundle>
+        <bundle>mvn:${project.groupId}/segmentrouting-impl/${project.version}</bundle>
         <bundle>mvn:${project.groupId}/segmentrouting-web/${project.version}</bundle>
     </feature>
 </features>
