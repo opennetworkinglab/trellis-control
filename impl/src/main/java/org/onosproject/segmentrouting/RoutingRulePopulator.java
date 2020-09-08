@@ -1274,14 +1274,61 @@ public class RoutingRulePopulator {
     }
 
     /**
-     * Creates a forwarding objective to punt all IP packets, destined to the
+     * Creates packet requests to punt all IP packets for the router.
+     * @param deviceId the switch dpid for the router
+     */
+    void populateIpPunts(DeviceId deviceId) {
+        manageIpPunts(deviceId, true);
+    }
+
+    /**
+     * Creates a packet request to punt all IP packets, destined to the
+     * specified IP address, which should be router's port IP address.
+     *
+     * @param deviceId the switch dpid for the router
+     * @param ipAddress the IP address of the router's port
+     */
+    void populateSingleIpPunts(DeviceId deviceId, IpAddress ipAddress) {
+        manageSingleIpPunts(deviceId, ipAddress, true);
+    }
+
+    /**
+     * Revokes packet requests for all devices.
+     */
+    void revokePacketsPunts() {
+        srManager.deviceService.getDevices().forEach(device -> {
+            manageIpPunts(device.id(), false);
+        });
+    }
+
+    /**
+     * Revokes the packet request to punt all IP packets, destined to the
+     * router's port IP address, except for the router's IP address.
+     *
+     * @param deviceId the switch dpid for the router
+     * @param ipAddress the IP address of the router's port
+     */
+    void revokeSingleIpPunts(DeviceId deviceId, IpAddress ipAddress) {
+        try {
+            if (!ipAddress.equals(config.getRouterIpv4(deviceId)) &&
+                    !ipAddress.equals(config.getRouterIpv6(deviceId))) {
+                manageSingleIpPunts(deviceId, ipAddress, false);
+            }
+        } catch (DeviceConfigNotFoundException e) {
+            log.warn(e.getMessage() + " Aborting revokeSingleIpPunts");
+        }
+    }
+
+    /**
+     * Creates or removes forwarding objectives ( packet-requests ) to punt all IP packets, destined to the
      * router's port IP addresses, to the controller. Note that the input
      * port should not be matched on, as these packets can come from any input.
      * Furthermore, these are applied only by the master instance.
      *
      * @param deviceId the switch dpid for the router
+     * @param request true to create a packet request, false to remove
      */
-    void populateIpPunts(DeviceId deviceId) {
+    void manageIpPunts(DeviceId deviceId, boolean request) {
         Ip4Address routerIpv4, pairRouterIpv4 = null;
         Ip6Address routerIpv6, routerLinkLocalIpv6, pairRouterIpv6 = null;
         try {
@@ -1295,15 +1342,16 @@ public class RoutingRulePopulator {
                 pairRouterIpv6 = config.getRouterIpv6(config.getPairDeviceId(deviceId));
             }
         } catch (DeviceConfigNotFoundException e) {
-            log.warn(e.getMessage() + " Aborting populateIpPunts.");
+            log.warn(e.getMessage() + " Aborting manageIpPunts.");
             return;
         }
 
-        if (!srManager.mastershipService.isLocalMaster(deviceId)) {
+        if (request && !srManager.mastershipService.isLocalMaster(deviceId)) {
             log.debug("Not installing port-IP punts - not the master for dev:{} ",
                       deviceId);
             return;
         }
+
         Set<IpAddress> allIps = new HashSet<>(config.getPortIPs(deviceId));
         allIps.add(routerIpv4);
         if (routerIpv6 != null) {
@@ -1317,44 +1365,28 @@ public class RoutingRulePopulator {
             allIps.add(pairRouterIpv6);
         }
         for (IpAddress ipaddr : allIps) {
-            populateSingleIpPunts(deviceId, ipaddr);
+            manageSingleIpPunts(deviceId, ipaddr, request);
         }
     }
 
     /**
-     * Creates a forwarding objective to punt all IP packets, destined to the
+     * Creates or removes a forwarding objective ( packet-request ) to punt all IP packets, destined to the
      * specified IP address, which should be router's port IP address.
      *
      * @param deviceId the switch dpid for the router
      * @param ipAddress the IP address of the router's port
+     * @param request true to create a packet request, false to remove
      */
-    void populateSingleIpPunts(DeviceId deviceId, IpAddress ipAddress) {
+    void manageSingleIpPunts(DeviceId deviceId, IpAddress ipAddress, boolean request) {
         TrafficSelector.Builder sbuilder = buildIpSelectorFromIpAddress(ipAddress);
         Optional<DeviceId> optDeviceId = Optional.of(deviceId);
 
-        srManager.packetService.requestPackets(sbuilder.build(),
-                                               PacketPriority.CONTROL, srManager.appId, optDeviceId);
-    }
-
-    /**
-     * Removes a forwarding objective to punt all IP packets, destined to the
-     * specified IP address, which should be router's port IP address.
-     *
-     * @param deviceId the switch dpid for the router
-     * @param ipAddress the IP address of the router's port
-     */
-    void revokeSingleIpPunts(DeviceId deviceId, IpAddress ipAddress) {
-        TrafficSelector.Builder sbuilder = buildIpSelectorFromIpAddress(ipAddress);
-        Optional<DeviceId> optDeviceId = Optional.of(deviceId);
-
-        try {
-            if (!ipAddress.equals(config.getRouterIpv4(deviceId)) &&
-                    !ipAddress.equals(config.getRouterIpv6(deviceId))) {
-                srManager.packetService.cancelPackets(sbuilder.build(),
-                                                      PacketPriority.CONTROL, srManager.appId, optDeviceId);
-            }
-        } catch (DeviceConfigNotFoundException e) {
-            log.warn(e.getMessage() + " Aborting revokeSingleIpPunts");
+        if (request) {
+            srManager.packetService.requestPackets(sbuilder.build(),
+                                                   PacketPriority.CONTROL, srManager.appId, optDeviceId);
+        } else {
+            srManager.packetService.cancelPackets(sbuilder.build(),
+                                                  PacketPriority.CONTROL, srManager.appId, optDeviceId);
         }
     }
 

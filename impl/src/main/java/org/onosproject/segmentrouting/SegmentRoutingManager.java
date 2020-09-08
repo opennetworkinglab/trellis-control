@@ -591,6 +591,8 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         packetExecutor = null;
         neighborExecutor = null;
 
+        cancelPackets();
+
         cfgService.removeListener(cfgListener);
         cfgService.unregisterConfigFactory(deviceConfigFactory);
         cfgService.unregisterConfigFactory(appConfigFactory);
@@ -733,6 +735,17 @@ public class SegmentRoutingManager implements SegmentRoutingService {
             log.info("{} route simplification", routeSimplification ? "Enabling" : "Disabling");
         }
 
+    }
+
+    /**
+     * Removes all packet requests.
+     */
+    private void cancelPackets() {
+        if (routingRulePopulator == null) {
+            return;
+        }
+        log.info("Removing packet requests.");
+        routingRulePopulator.revokePacketsPunts();
     }
 
     /**
