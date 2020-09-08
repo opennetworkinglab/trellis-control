@@ -30,7 +30,6 @@ import org.onosproject.net.flow.TrafficTreatment;
 import org.onosproject.net.host.HostService;
 import org.onosproject.net.packet.DefaultOutboundPacket;
 import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

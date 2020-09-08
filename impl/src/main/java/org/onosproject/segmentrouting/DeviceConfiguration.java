@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onosproject.segmentrouting.config;
+package org.onosproject.segmentrouting;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -40,7 +40,10 @@ import org.onosproject.net.config.basics.InterfaceConfig;
 import org.onosproject.net.host.InterfaceIpAddress;
 import org.onosproject.net.intf.Interface;
 import org.onosproject.routeservice.Route;
-import org.onosproject.segmentrouting.SegmentRoutingManager;
+import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
+import org.onosproject.segmentrouting.config.DeviceProperties;
+import org.onosproject.segmentrouting.config.SegmentRoutingAppConfig;
+import org.onosproject.segmentrouting.config.SegmentRoutingDeviceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

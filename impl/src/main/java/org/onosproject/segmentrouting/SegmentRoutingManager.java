@@ -93,7 +93,6 @@ import org.onosproject.routeservice.RouteEvent;
 import org.onosproject.routeservice.RouteListener;
 import org.onosproject.routeservice.RouteService;
 import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.onosproject.segmentrouting.config.SegmentRoutingAppConfig;
 import org.onosproject.segmentrouting.config.SegmentRoutingDeviceConfig;
 import org.onosproject.segmentrouting.grouphandler.DefaultGroupHandler;

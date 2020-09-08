@@ -44,7 +44,7 @@ import org.onosproject.segmentrouting.DefaultRoutingHandler;
 import org.onosproject.segmentrouting.SegmentRoutingManager;
 import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
 import org.onosproject.segmentrouting.config.DeviceProperties;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
+import org.onosproject.segmentrouting.DeviceConfiguration;
 import org.onosproject.segmentrouting.storekey.DestinationSetNextObjectiveStoreKey;
 import org.onosproject.segmentrouting.storekey.PortNextObjectiveStoreKey;
 import org.onosproject.segmentrouting.storekey.VlanNextObjectiveStoreKey;

@@ -45,7 +45,6 @@ import org.onosproject.net.provider.ProviderId;
 import org.onosproject.routeservice.ResolvedRoute;
 import org.onosproject.routeservice.Route;
 import org.onosproject.routeservice.RouteEvent;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.onosproject.segmentrouting.config.SegmentRoutingDeviceConfig;
 import org.onosproject.segmentrouting.phasedrecovery.api.PhasedRecoveryService;
 import org.onosproject.store.service.StorageService;

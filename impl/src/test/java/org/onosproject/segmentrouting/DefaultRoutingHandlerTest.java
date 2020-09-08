@@ -25,7 +25,6 @@ import org.onosproject.cluster.NodeId;
 import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.TestConsistentMap;
 import org.onosproject.store.service.TestConsistentMultimap;

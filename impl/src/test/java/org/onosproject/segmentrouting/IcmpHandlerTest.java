@@ -33,7 +33,6 @@ import org.onosproject.core.ApplicationId;
 import org.onosproject.net.config.ConfigApplyDelegate;
 import org.onosproject.net.config.basics.InterfaceConfig;
 import org.onosproject.net.device.DeviceService;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.onosproject.segmentrouting.config.SegmentRoutingAppConfig;
 import org.onosproject.segmentrouting.config.SegmentRoutingDeviceConfig;
 

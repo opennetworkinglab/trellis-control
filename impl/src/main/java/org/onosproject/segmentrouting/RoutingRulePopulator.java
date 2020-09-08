@@ -38,7 +38,6 @@ import org.onosproject.net.flowobjective.ObjectiveError;
 import org.onosproject.net.intf.Interface;
 import org.onosproject.net.packet.PacketPriority;
 import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.onosproject.segmentrouting.grouphandler.DefaultGroupHandler;
 import org.onosproject.segmentrouting.grouphandler.DestinationSet;
 import org.onosproject.net.DeviceId;

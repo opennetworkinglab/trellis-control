@@ -36,6 +36,7 @@ import org.onosproject.net.host.InterfaceIpAddress;
 import org.onosproject.net.intf.Interface;
 import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.neighbour.NeighbourResolutionService;
+import org.onosproject.segmentrouting.DeviceConfiguration;
 import org.onosproject.segmentrouting.SegmentRoutingManager;
 
 import java.io.InputStream;

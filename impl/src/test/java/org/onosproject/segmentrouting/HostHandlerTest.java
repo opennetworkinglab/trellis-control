@@ -51,7 +51,6 @@ import org.onosproject.routeservice.Route;
 import org.onosproject.routeservice.RouteInfo;
 import org.onosproject.routeservice.RouteService;
 import org.onosproject.routeservice.RouteTableId;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 import org.onosproject.segmentrouting.config.SegmentRoutingDeviceConfig;
 import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.TestConsistentMap;

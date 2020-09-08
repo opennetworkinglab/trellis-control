@@ -34,7 +34,6 @@ import org.onosproject.net.device.DeviceService;
 import org.onosproject.net.intf.Interface;
 import org.onosproject.net.intf.InterfaceService;
 import org.onosproject.net.provider.ProviderId;
-import org.onosproject.segmentrouting.config.DeviceConfiguration;
 
 import java.util.List;
 import java.util.Set;
