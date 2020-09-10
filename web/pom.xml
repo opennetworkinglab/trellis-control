@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.onosproject</groupId>
         <artifactId>segmentrouting</artifactId>
-        <version>3.0.0</version>
+        <version>3.0.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -33,7 +33,7 @@
 
     <properties>
         <web.context>/onos/segmentrouting</web.context>
-        <api.version>3.0.0</api.version>
+        <api.version>3.0.1</api.version>
         <api.title>Segment Routing REST API</api.title>
         <api.description>
             REST API for Segment Routing Application
