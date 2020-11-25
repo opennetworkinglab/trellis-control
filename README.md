@@ -7,10 +7,10 @@ docker run -it --rm -v $HOME/.m2:/root/.m2 -v $PWD:/root/trellis-control -w /roo
 
 ```
 
-The OAR file can be located under `oar/target`
+The OAR file can be located under `app/target`
 
 ## Install
 
 ```
-onos-app <ip>:<port> install! oar/target/segmentrouting-oar-<x.y.z>.oar
+onos-app <ip>:<port> install! app/target/segmentrouting-app-<x.y.z>.oar
 ```
