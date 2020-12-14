@@ -887,12 +887,15 @@ public class DefaultGroupHandler {
 
         // Adjust the meta according to VLAN configuration
         if (taggedVlans.contains(vlanId)) {
+            meta.matchVlanId(vlanId);
             treatment.setVlanId(vlanId);
         } else if (vlanId.equals(VlanId.NONE)) {
             if (untaggedVlan != null) {
                 meta.matchVlanId(untaggedVlan);
+                treatment.popVlan();
             } else if (nativeVlan != null) {
                 meta.matchVlanId(nativeVlan);
+                treatment.popVlan();
             } else {
                 log.warn("Untagged nexthop {}/{} is not allowed on {} without untagged or native vlan",
                         macAddr, vlanId, connectPoint);
@@ -1035,6 +1038,13 @@ public class DefaultGroupHandler {
                 .withType(type)
                 .fromApp(appId);
         if (meta != null) {
+            // Udate the meta VLAN id to match the PW transport label
+            if (!popVlanInHashGroup(ds)) {
+                TrafficSelector newMeta = DefaultTrafficSelector.builder(meta)
+                        .matchVlanId(srManager.getPwTransportVlan())
+                        .build();
+                meta = newMeta;
+            }
             nextObjBuilder.withMeta(meta);
         }
 
@@ -1399,7 +1409,10 @@ public class DefaultGroupHandler {
         if (portNextObjId != -1 && portNextObjStore.containsKey(key)) {
             NextObjective.Builder nextObjBuilder = DefaultNextObjective
                     .builder().withId(portNextObjId)
-                    .withType(NextObjective.Type.SIMPLE).fromApp(appId);
+                    .withType(NextObjective.Type.SIMPLE)
+                    .addTreatment(tbuilder.build())
+                    .fromApp(appId)
+                    .withMeta(mbuilder.build());
             ObjectiveContext context = new DefaultObjectiveContext(
                     (objective) -> log.debug("removePortNextObjective removes NextObj {} on {}",
                                              portNextObjId, deviceId),
@@ -1587,24 +1600,43 @@ public class DefaultGroupHandler {
             return;
         }
 
-        TrafficSelector metadata =
-                 DefaultTrafficSelector.builder().matchVlanId(hostVlanId).build();
+        ConnectPoint connectPoint = new ConnectPoint(deviceId, port);
+        VlanId untaggedVlan = srManager.interfaceService.getUntaggedVlanId(connectPoint);
+        Set<VlanId> taggedVlans = srManager.interfaceService.getTaggedVlanId(connectPoint);
+        VlanId nativeVlan = srManager.interfaceService.getNativeVlanId(connectPoint);
 
-        TrafficTreatment.Builder tbuilder = DefaultTrafficTreatment.builder();
-        tbuilder.deferred()
+        TrafficSelector.Builder mbuilder = DefaultTrafficSelector.builder();
+        TrafficTreatment.Builder tbuilder = DefaultTrafficTreatment.builder()
+                .deferred()
                 .setEthDst(hostMac)
                 .setEthSrc(deviceMac)
-                .setVlanId(hostVlanId)
                 .setOutput(port);
 
+        if (taggedVlans.contains(hostVlanId)) {
+            mbuilder.matchVlanId(hostVlanId);
+            tbuilder.setVlanId(hostVlanId);
+        } else if (hostVlanId.equals(VlanId.NONE)) {
+            if (untaggedVlan != null) {
+                mbuilder.matchVlanId(untaggedVlan);
+                tbuilder.popVlan();
+            } else if (nativeVlan != null) {
+                mbuilder.matchVlanId(nativeVlan);
+                tbuilder.popVlan();
+            } else {
+                log.warn("Untagged nexthop {}/{} is not allowed on {} without untagged or native vlan",
+                        hostMac, hostVlanId, connectPoint);
+                return;
+            }
+        }
+
         log.debug(" update L3Ucast : deviceMac {}, port {}, host {}/{}, nextid {}, Treatment {} Meta {}",
-                                     deviceMac, port, hostMac, hostVlanId, nextId, tbuilder.build(), metadata);
+                deviceMac, port, hostMac, hostVlanId, nextId, tbuilder.build(), mbuilder.build());
 
         NextObjective.Builder nextObjBuilder = DefaultNextObjective
                 .builder().withId(nextId)
                 .withType(NextObjective.Type.SIMPLE).fromApp(appId)
                 .addTreatment(tbuilder.build())
-                .withMeta(metadata);
+                .withMeta(mbuilder.build());
 
         ObjectiveContext context = new DefaultObjectiveContext(
                 (objective) -> log.debug(" NextId {} successfully updated host {} vlan {} with port {}",

@@ -474,8 +474,8 @@ public class RoutingRulePopulator {
         VlanId nativeVlan = srManager.interfaceService.getNativeVlanId(connectPoint);
 
         // Create route treatment
-        TrafficTreatment.Builder tbuilder = DefaultTrafficTreatment.builder();
-        tbuilder.deferred()
+        TrafficTreatment.Builder tbuilder = DefaultTrafficTreatment.builder()
+                .deferred()
                 .setEthDst(hostMac)
                 .setEthSrc(routerMac)
                 .setOutput(outPort);
@@ -485,12 +485,15 @@ public class RoutingRulePopulator {
 
         // Adjust treatment and meta according to VLAN configuration
         if (taggedVlans.contains(hostVlanId)) {
+            mbuilder.matchVlanId(hostVlanId);
             tbuilder.setVlanId(hostVlanId);
         } else if (hostVlanId.equals(VlanId.NONE)) {
             if (untaggedVlan != null) {
                 mbuilder.matchVlanId(untaggedVlan);
+                tbuilder.popVlan();
             } else if (nativeVlan != null) {
                 mbuilder.matchVlanId(nativeVlan);
+                tbuilder.popVlan();
             } else {
                 log.warn("Untagged nexthop {}/{} is not allowed on {} without untagged or native vlan",
                         hostMac, hostVlanId, connectPoint);
@@ -1724,9 +1727,11 @@ public class RoutingRulePopulator {
         TrafficSelector.Builder mbuilder = DefaultTrafficSelector.builder();
 
         if (!popVlan) {
+            mbuilder.matchVlanId(vlanId);
             tbuilder.setVlanId(vlanId);
         } else {
             mbuilder.matchVlanId(vlanId);
+            tbuilder.popVlan();
         }
 
         // if the objective is to revoke an existing rule, and for some reason
