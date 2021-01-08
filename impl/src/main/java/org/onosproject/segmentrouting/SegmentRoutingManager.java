@@ -146,9 +146,11 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
@@ -1314,7 +1316,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
      * @param nextId of Next Obj which needs to be updated.
      */
     public void updateMacVlanTreatment(DeviceId deviceId, MacAddress hostMac,
-                             VlanId hostVlanId, PortNumber port, int nextId) {
+                                       VlanId hostVlanId, PortNumber port, int nextId) {
         // Check if we are the king of this device
         // just one instance should perform this update
         if (!defaultRoutingHandler.shouldProgram(deviceId)) {
@@ -2104,6 +2106,9 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
             DeviceId deviceId = intf.connectPoint().deviceId();
             PortNumber portNum = intf.connectPoint().port();
+            // We need to do nexthop update al least one time for each
+            // interface config change. There is no difference when it is done;
+            boolean updateNexthop = false;
 
             removeSubnetConfig(prevIntf.connectPoint(),
                                Sets.difference(new HashSet<>(prevIntf.ipAddressesList()),
@@ -2116,8 +2121,12 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                     // Update filtering objective and L2IG group bucket
                     updatePortVlanTreatment(deviceId, portNum, prevIntf.vlanNative(), false);
                 } else {
-                    // RemoveVlanNative
+                    // RemoveVlanNative - affected scenarios:
+                    // (T,N)->U; (T*,N)->U; (T,N)->(T,N); (T,N)->T
                     updateVlanConfigInternal(deviceId, portNum, prevIntf.vlanNative(), true, false);
+                    // Update the nexthops of the indirect routes
+                    updateNexthop = true;
+                    routeEventExecutor.execute(() -> routeHandler.processIntfVlanUpdatedEvent(deviceId, portNum));
                 }
             }
 
@@ -2125,16 +2134,27 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                     && !prevIntf.vlanUntagged().equals(intf.vlanUntagged())
                     && !prevIntf.vlanUntagged().equals(intf.vlanNative())) {
                 if (intf.vlanTagged().contains(prevIntf.vlanUntagged())) {
-                    // Update filtering objective and L2IG group bucket
+                    // Update filtering objective and L2IG group bucket - affected scenarios:
+                    // U->(T*,N); U->T*
                     updatePortVlanTreatment(deviceId, portNum, prevIntf.vlanUntagged(), false);
+                    if (!updateNexthop) {
+                        updateNexthop = true;
+                        routeEventExecutor.execute(() -> routeHandler.processIntfVlanUpdatedEvent(deviceId, portNum));
+                    }
                 } else {
-                    // RemoveVlanUntagged
+                    // RemoveVlanUntagged - affected scenarios:
+                    // U->U; U->(T,N); U->T
                     updateVlanConfigInternal(deviceId, portNum, prevIntf.vlanUntagged(), true, false);
+                    if (!updateNexthop) {
+                        updateNexthop = true;
+                        routeEventExecutor.execute(() -> routeHandler.processIntfVlanUpdatedEvent(deviceId, portNum));
+                    }
                 }
             }
 
             if (!prevIntf.vlanTagged().isEmpty() && !intf.vlanTagged().equals(prevIntf.vlanTagged())) {
-                // RemoveVlanTagged
+                // RemoveVlanTagged - affected scenarios:
+                // T->U; T->T; (T,N*)->U; (T,N)->(T,N)
                 Sets.difference(prevIntf.vlanTagged(), intf.vlanTagged()).stream()
                         .filter(i -> !intf.vlanUntagged().equals(i))
                         .filter(i -> !intf.vlanNative().equals(i))
@@ -2149,30 +2169,45 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                     // Update filtering objective and L2IG group bucket
                     updatePortVlanTreatment(deviceId, portNum, intf.vlanNative(), true);
                 } else {
-                    // AddVlanNative
+                    // AddVlanNative - affected scenarios
+                    // U->(T,N); U->(T*,N); T->(T,N)
                     updateVlanConfigInternal(deviceId, portNum, intf.vlanNative(), true, true);
+                    if (!updateNexthop) {
+                        updateNexthop = true;
+                        routeEventExecutor.execute(() -> routeHandler.processIntfVlanUpdatedEvent(deviceId, portNum));
+                    }
                 }
             }
 
             if (!intf.vlanTagged().isEmpty() && !intf.vlanTagged().equals(prevIntf.vlanTagged())) {
-                // AddVlanTagged
+                // AddVlanTagged - affected scenarios
+                // U->T; U->(T,N*); T->T; (T,N)->(T,N)
                 Sets.difference(intf.vlanTagged(), prevIntf.vlanTagged()).stream()
                         .filter(i -> !prevIntf.vlanUntagged().equals(i))
                         .filter(i -> !prevIntf.vlanNative().equals(i))
                         .forEach(vlanId -> updateVlanConfigInternal(
                                 deviceId, portNum, vlanId, false, true)
                 );
+
             }
 
             if (!intf.vlanUntagged().equals(VlanId.NONE)
                     && !prevIntf.vlanUntagged().equals(intf.vlanUntagged())
                     && !prevIntf.vlanNative().equals(intf.vlanUntagged())) {
                 if (prevIntf.vlanTagged().contains(intf.vlanUntagged())) {
-                    // Update filtering objective and L2IG group bucket
+                    // Update filtering objective and L2IG group bucket - affected scenarios
+                    // (T*,N)->U; T*->U
                     updatePortVlanTreatment(deviceId, portNum, intf.vlanUntagged(), true);
+                    if (!updateNexthop) {
+                        routeEventExecutor.execute(() -> routeHandler.processIntfVlanUpdatedEvent(deviceId, portNum));
+                    }
                 } else {
-                    // AddVlanUntagged
+                    // AddVlanUntagged - affected scenarios
+                    // U->U; (T,N)->U; T->U
                     updateVlanConfigInternal(deviceId, portNum, intf.vlanUntagged(), true, true);
+                    if (!updateNexthop) {
+                        routeEventExecutor.execute(() -> routeHandler.processIntfVlanUpdatedEvent(deviceId, portNum));
+                    }
                 }
             }
             addSubnetConfig(prevIntf.connectPoint(),
@@ -2198,11 +2233,6 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         if (getVlanNextObjectiveId(deviceId, vlanId) != -1) {
             // Update L2IG bucket of the port
             grpHandler.updateL2InterfaceGroupBucket(portNum, vlanId, pushVlan);
-            // Update bridging and unicast routing rule for each host
-            hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
-                    vlanId, !pushVlan, false));
-            hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
-                    vlanId, pushVlan, true));
         } else {
             log.warn("Failed to retrieve next objective for vlan {} in device {}:{}", vlanId, deviceId, portNum);
         }
@@ -2226,8 +2256,9 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
         if (nextId != -1 && !install) {
             // Remove L2 Bridging rule and L3 Unicast rule to the host
-            hostEventExecutor.execute(() -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum,
-                    vlanId, pushVlan, install));
+            ScheduledFuture<?> future = hostEventExecutor.schedule(
+                    () -> hostHandler.processIntfVlanUpdatedEvent(deviceId, portNum, vlanId, pushVlan, install),
+                    0, TimeUnit.SECONDS);
             // Remove broadcast forwarding rule and corresponding L2FG for VLAN
             // only if there is no port configured on that VLAN ID
             if (!getVlanPortMap(deviceId).containsKey(vlanId)) {
@@ -2238,6 +2269,12 @@ public class SegmentRoutingManager implements SegmentRoutingService {
             } else {
                 // Remove a single port from L2FG
                 grpHandler.updateGroupFromVlanConfiguration(vlanId, portNum, nextId, install);
+            }
+            // Before moving forward we have to be sure that processIntfVlanUpdatedEvent completed;
+            try {
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                log.warn("Exception caught when executing updateVlanConfigInternal future");
             }
             // Remove L2IG of the port
             grpHandler.removePortNextObjective(deviceId, portNum, vlanId, pushVlan);

@@ -208,12 +208,17 @@ public class HostHandler {
             }
         });
 
+        // NOTE: that we use the nexthop vlanId to retrieve the nextId
+        //       while the vlanId used to program the L3 unicast chain
+        //       is derived from the port configuration. In case of
+        //       a tagged interface we use host vlanId. Host vlan should
+        //       be part of the tags configured for that port. See the
+        //       code in DefaultGroupHandler.updateL3UcastGroupBucket
         int nextId = srManager.getMacVlanNextObjectiveId(location.deviceId(), hostMac, hostVlanId, null, false);
         if (nextId != -1) {
-            VlanId vlanId = Optional.ofNullable(srManager.getInternalVlanId(location)).orElse(hostVlanId);
             log.debug(" Updating next objective for device {}, host {}/{}, port {}, nextid {}",
-                                location.deviceId(), hostMac, vlanId, location.port(), nextId);
-            srManager.updateMacVlanTreatment(location.deviceId(), hostMac, vlanId,
+                                location.deviceId(), hostMac, hostVlanId, location.port(), nextId);
+            srManager.updateMacVlanTreatment(location.deviceId(), hostMac, hostVlanId,
                                 location.port(), nextId);
         }
 
@@ -759,8 +764,21 @@ public class HostHandler {
             return;
         }
 
-        hosts.forEach(host -> hostWorkers.execute(() -> processIntfVlanUpdatedEventInternal(
-                host, deviceId, portNum, vlanId, popVlan, install), host.id().hashCode()));
+        List<CompletableFuture<Void>> hostFutures = Lists.newArrayList();
+        hosts.forEach(host -> hostFutures.add(hostWorkers.submit(() -> processIntfVlanUpdatedEventInternal(
+                host, deviceId, portNum, vlanId, popVlan, install), host.id().hashCode())));
+        // Let's wait for the completion of all hosts
+        try {
+            CompletableFuture.allOf(hostFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(objectives -> hostFutures.stream()
+                            .map(CompletableFuture::join)
+                            .collect(Collectors.toList())
+                    )
+                    .get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.warn("Exception caught when executing processIntfVlanUpdatedEvent futures");
+            hostFutures.forEach(future -> future.cancel(false));
+        }
     }
 
     private void processIntfVlanUpdatedEventInternal(Host host, DeviceId deviceId, PortNumber portNum,
@@ -768,29 +786,42 @@ public class HostHandler {
         MacAddress mac = host.mac();
         VlanId hostVlanId = host.vlan();
 
+        List<CompletableFuture<Objective>> futures = Lists.newArrayList();
         if (!install) {
             // Do not check the host validity. Just remove all rules corresponding to the vlan id
             // Revoke forwarding objective for bridging to the host
-            srManager.defaultRoutingHandler.updateBridging(deviceId, portNum, mac, vlanId, popVlan, false);
+            futures.add(srManager.defaultRoutingHandler.updateBridging(deviceId, portNum, mac, vlanId,
+                    popVlan, false));
 
             // Revoke forwarding objective and corresponding simple Next objective
             // for each Host and IP address connected to given port
             host.ipAddresses().forEach(ipAddress ->
-                srManager.routingRulePopulator.updateFwdObj(deviceId, portNum, ipAddress.toIpPrefix(),
-                                                            mac, vlanId, popVlan, false)
-            );
+                    futures.add(srManager.defaultRoutingHandler.updateFwdObj(deviceId, portNum, ipAddress.toIpPrefix(),
+                        mac, vlanId, popVlan, false)));
         } else {
             // Check whether the host vlan is valid for new interface configuration
             if ((!popVlan && hostVlanId.equals(vlanId)) ||
                     (popVlan && hostVlanId.equals(VlanId.NONE))) {
-                srManager.defaultRoutingHandler.updateBridging(deviceId, portNum, mac, vlanId, popVlan, true);
+                futures.add(srManager.defaultRoutingHandler.updateBridging(deviceId, portNum, mac, vlanId,
+                        popVlan, true));
                 // Update Forwarding objective and corresponding simple Next objective
                 // for each Host and IP address connected to given port
                 host.ipAddresses().forEach(ipAddress ->
-                    srManager.routingRulePopulator.updateFwdObj(deviceId, portNum, ipAddress.toIpPrefix(),
-                                                                mac, vlanId, popVlan, true)
-                );
+                    futures.add(srManager.defaultRoutingHandler.updateFwdObj(deviceId, portNum, ipAddress.toIpPrefix(),
+                            mac, vlanId, popVlan, true)));
             }
+        }
+        // Let's wait for the completion of update procedure
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .thenApply(objectives -> futures.stream()
+                            .map(CompletableFuture::join)
+                            .collect(Collectors.toList())
+                    )
+                    .get();
+        } catch (InterruptedException | ExecutionException e) {
+            log.warn("Exception caught when executing processIntfVlanUpdatedEventInternal futures");
+            futures.forEach(future -> future.cancel(false));
         }
     }
 

@@ -1405,19 +1405,21 @@ public class DefaultRoutingHandler {
         return CompletableFuture.completedFuture(null);
     }
 
-    void updateBridging(DeviceId deviceId, PortNumber portNum, MacAddress hostMac,
-                        VlanId vlanId, boolean popVlan, boolean install) {
+    CompletableFuture<Objective> updateBridging(DeviceId deviceId, PortNumber portNum, MacAddress hostMac,
+                                                VlanId vlanId, boolean popVlan, boolean install) {
         if (shouldProgram(deviceId)) {
-            srManager.routingRulePopulator.updateBridging(deviceId, portNum, hostMac, vlanId, popVlan, install);
+            return srManager.routingRulePopulator.updateBridging(deviceId, portNum, hostMac, vlanId, popVlan, install);
         }
+        return CompletableFuture.completedFuture(null);
     }
 
-    void updateFwdObj(DeviceId deviceId, PortNumber portNumber, IpPrefix prefix, MacAddress hostMac,
-                      VlanId vlanId, boolean popVlan, boolean install) {
+    CompletableFuture<Objective> updateFwdObj(DeviceId deviceId, PortNumber portNumber, IpPrefix prefix,
+                                              MacAddress hostMac, VlanId vlanId, boolean popVlan, boolean install) {
         if (shouldProgram(deviceId)) {
-            srManager.routingRulePopulator.updateFwdObj(deviceId, portNumber, prefix, hostMac,
+            return srManager.routingRulePopulator.updateFwdObj(deviceId, portNumber, prefix, hostMac,
                     vlanId, popVlan, install);
         }
+        return CompletableFuture.completedFuture(null);
     }
 
     /**

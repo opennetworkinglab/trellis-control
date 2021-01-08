@@ -38,6 +38,7 @@ import org.onosproject.net.flowobjective.DefaultNextObjective;
 import org.onosproject.net.flowobjective.DefaultObjectiveContext;
 import org.onosproject.net.flowobjective.FlowObjectiveService;
 import org.onosproject.net.flowobjective.NextObjective;
+import org.onosproject.net.flowobjective.Objective;
 import org.onosproject.net.flowobjective.ObjectiveContext;
 import org.onosproject.net.link.LinkService;
 import org.onosproject.segmentrouting.DefaultRoutingHandler;
@@ -60,6 +61,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -1475,12 +1477,14 @@ public class DefaultGroupHandler {
      * @param portNum  the outgoing port on the device
      * @param treatment the actions applied on the packets (should include outport)
      * @param meta optional data to pass to the driver
+     * @return a completable future that completes when the port has been removed
      */
-    public void removeGroupFromPort(PortNumber portNum, TrafficTreatment treatment,
-                                    TrafficSelector meta) {
+    public CompletableFuture<Objective> removeGroupFromPort(PortNumber portNum, TrafficTreatment treatment,
+                                                            TrafficSelector meta) {
         PortNextObjectiveStoreKey key = new PortNextObjectiveStoreKey(
                 deviceId, portNum, treatment, meta);
         Integer nextId = portNextObjStore.get(key);
+        CompletableFuture<Objective> future = new CompletableFuture<>();
 
         NextObjective.Builder nextObjBuilder = DefaultNextObjective
                 .builder().withId(nextId)
@@ -1490,12 +1494,14 @@ public class DefaultGroupHandler {
                 .withMeta(meta);
 
         ObjectiveContext context = new DefaultObjectiveContext(
-                (objective) ->
-                        log.info("removeGroupFromPort installed "
-                                          + "NextObj {} on {}", nextId, deviceId),
+                (objective) -> {
+                    log.info("removeGroupFromPort done " + "NextObj {} on {}", nextId, deviceId);
+                    future.complete(objective);
+                },
                 (objective, error) -> {
                     log.warn("removeGroupFromPort failed to install NextObj {} on {}: {}", nextId, deviceId, error);
                     srManager.invalidateNextObj(objective.id());
+                    future.complete(null);
                 }
         );
         NextObjective nextObj = nextObjBuilder.remove(context);
@@ -1504,6 +1510,7 @@ public class DefaultGroupHandler {
                           + "for port {}", nextId, deviceId, portNum);
 
         portNextObjStore.remove(key);
+        return future;
     }
 
     /**
@@ -1627,6 +1634,10 @@ public class DefaultGroupHandler {
                         hostMac, hostVlanId, connectPoint);
                 return;
             }
+        } else {
+            log.warn("Tagged nexthop {}/{} is not allowed on {} without VLAN listed"
+                    + " in tagged vlan", hostMac, hostVlanId, connectPoint);
+            return;
         }
 
         log.debug(" update L3Ucast : deviceMac {}, port {}, host {}/{}, nextid {}, Treatment {} Meta {}",

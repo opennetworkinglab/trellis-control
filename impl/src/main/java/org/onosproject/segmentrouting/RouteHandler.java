@@ -22,6 +22,7 @@ import org.onlab.packet.IpPrefix;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.net.ConnectPoint;
+import org.onosproject.net.Host;
 import org.onosproject.net.HostLocation;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.host.HostEvent;
@@ -264,20 +265,24 @@ public class RouteHandler {
         if (!batchedSubnets.isEmpty()) {
            // For each new location, if NextObj exists for the host, update with new location ..
            Sets.difference(newLocations, prevLocations).forEach(newLocation -> {
-                  int nextId = srManager.getMacVlanNextObjectiveId(newLocation.deviceId(),
-                                                                   hostMac, hostVlanId, null, false);
-                  VlanId vlanId = Optional.ofNullable(srManager.getInternalVlanId(newLocation)).orElse(hostVlanId);
-
-                  if (nextId != -1) {
-                      //Update the nextId group bucket
-                      log.debug("HostMoved. NextId exists, update L3 Ucast Group Bucket {}, {}, {} --> {}",
-                                             newLocation, hostMac, vlanId, nextId);
-                      srManager.updateMacVlanTreatment(newLocation.deviceId(), hostMac, vlanId,
-                                                       newLocation.port(), nextId);
-                  } else {
-                      log.debug("HostMoved. NextId does not exist for this location {}, host {}/{}",
-                                              newLocation, hostMac, vlanId);
-                  }
+                    // NOTE: that we use the nexthop vlanId to retrieve the nextId
+                    //       while the vlanId used to program the L3 unicast chain
+                    //       is derived from the port configuration. In case of
+                    //       a tagged interface we use host vlanId. Host vlan should
+                    //       be part of the tags configured for that port. See the
+                    //       code in DefaultGroupHandler.updateL3UcastGroupBucket
+                    int nextId = srManager.getMacVlanNextObjectiveId(newLocation.deviceId(),
+                            hostMac, hostVlanId, null, false);
+                    if (nextId != -1) {
+                        //Update the nextId group bucket
+                        log.debug("HostMoved. NextId exists, update L3 Ucast Group Bucket {}, {}, {} --> {}",
+                                newLocation, hostMac, hostVlanId, nextId);
+                        srManager.updateMacVlanTreatment(newLocation.deviceId(), hostMac, hostVlanId,
+                                newLocation.port(), nextId);
+                    } else {
+                        log.debug("HostMoved. NextId does not exist for this location {}, host {}/{}",
+                                newLocation, hostMac, hostVlanId);
+                    }
            });
         }
 
@@ -325,6 +330,40 @@ public class RouteHandler {
             });
         });
 
+    }
+
+    public void processIntfVlanUpdatedEvent(DeviceId deviceId, PortNumber portNum) {
+        log.info("processIntfVlanUpdatedEvent {}/{}", deviceId, portNum);
+
+        // Verify there are hosts attached to the port
+        ConnectPoint connectPoint = new ConnectPoint(deviceId, portNum);
+        Set<Host> hosts = srManager.hostService.getConnectedHosts(connectPoint);
+        if (hosts == null || hosts.size() == 0) {
+            log.debug("processIntfVlanUpdatedEvent: No hosts connected to {}", connectPoint);
+            return;
+        }
+
+        // Iterate over the hosts and update if needed the vlan of the nextobjective
+        hosts.forEach(host -> {
+            // Verify if there is a nexthop and only then update the l3 indirect unicast chain
+            int nextId = srManager.getMacVlanNextObjectiveId(deviceId, host.mac(), host.vlan(),
+                    null, false);
+            if (nextId != -1) {
+                //Update the nextId group bucket
+                log.debug("intfVlanUpdated. NextId exists, update L3 Ucast Group Bucket {}, {}, {} --> {}",
+                        connectPoint, host.mac(), host.vlan(), nextId);
+                // NOTE: that we use the nexthop vlanId to retrieve the nextId
+                //       while the vlanId used to program the L3 unicast chain
+                //       is derived from the port configuration. In case of
+                //       a tagged interface we use host vlanId. Host vlan should
+                //       be part of the tags configured for that port. See the
+                //       code in DefaultGroupHandler.updateL3UcastGroupBucket
+                srManager.updateMacVlanTreatment(deviceId, host.mac(), host.vlan(), portNum, nextId);
+            } else {
+                log.debug("intfVlanUpdated. NextId does not exist for this location {}, host {}/{}",
+                        connectPoint, host.mac(), host.vlan());
+            }
+        });
     }
 
     private boolean isReady() {

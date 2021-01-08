@@ -67,6 +67,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -78,7 +79,6 @@ import static org.onlab.packet.ICMP6.NEIGHBOR_SOLICITATION;
 import static org.onlab.packet.ICMP6.ROUTER_ADVERTISEMENT;
 import static org.onlab.packet.ICMP6.ROUTER_SOLICITATION;
 import static org.onlab.packet.IPv6.PROTOCOL_ICMP6;
-import static org.onosproject.segmentrouting.SegmentRoutingService.DEFAULT_PRIORITY;
 
 /**
  * Populator of segment routing flow rules.
@@ -95,7 +95,9 @@ public class RoutingRulePopulator {
 
     // used for signalling the driver to remove vlan table and tmac entry also
     private static final long CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES = 1;
-    private static final long DOUBLE_TAGGED_METADATA_MASK = 0xffffffffffffffffL;
+    // used for signalling the driver when not remove tmac entries
+    private static final long INTERFACE_CONFIG_UPDATE = 2;
+    private static final long METADATA_MASK = 0xffffffffffffffffL;
 
     /**
      * Creates a RoutingRulePopulator object.
@@ -232,7 +234,7 @@ public class RoutingRulePopulator {
                 mbuilder.matchVlanId(nativeVlan);
                 tbuilder.immediate().popVlan();
             } else {
-                log.warn("Untagged host {}/{} is not allowed on {} without untagged or native" +
+                log.warn("Untagged host {}/{} is not allowed on {} without untagged or native " +
                         "vlan config", mac, hostVlanId, connectPoint);
                 return null;
             }
@@ -272,10 +274,11 @@ public class RoutingRulePopulator {
      * @param vlanId Vlan ID configured on the switch port
      * @param popVlan true to pop Vlan tag at TrafficTreatment, false otherwise
      * @param install true to populate the objective, false to revoke
+     * @return a completable future that completes when the update of the bridging rule completes
      */
     // TODO Refactor. There are a lot of duplications between this method, populateBridging,
     //      revokeBridging and bridgingFwdObjBuilder.
-    void updateBridging(DeviceId deviceId, PortNumber portNum, MacAddress hostMac,
+    CompletableFuture<Objective> updateBridging(DeviceId deviceId, PortNumber portNum, MacAddress hostMac,
                         VlanId vlanId, boolean popVlan, boolean install) {
         // Create host selector
         TrafficSelector.Builder sbuilder = DefaultTrafficSelector.builder();
@@ -297,6 +300,7 @@ public class RoutingRulePopulator {
 
         int portNextObjId = srManager.getPortNextObjectiveId(deviceId, portNum,
                 tbuilder.build(), mbuilder.build(), install);
+        CompletableFuture<Objective> future = new CompletableFuture<>();
         if (portNextObjId != -1) {
             ForwardingObjective.Builder fob = DefaultForwardingObjective.builder()
                     .withFlag(ForwardingObjective.Flag.SPECIFIC)
@@ -307,14 +311,21 @@ public class RoutingRulePopulator {
                     .makePermanent();
 
             ObjectiveContext context = new DefaultObjectiveContext(
-                    (objective) -> log.debug("Brigding rule for {}/{} {}", hostMac, vlanId,
-                            install ? "populated" : "revoked"),
-                    (objective, error) -> log.warn("Failed to {} bridging rule for {}/{}: {}",
-                            install ? "populate" : "revoke", hostMac, vlanId, error));
+                    (objective) -> {
+                        log.debug("Brigding rule for {}/{} {}", hostMac, vlanId, install ? "populated" : "revoked");
+                        future.complete(objective);
+                    },
+                    (objective, error) -> {
+                        log.warn("Failed to {} bridging rule for {}/{}: {}", install ? "populate" : "revoke",
+                                hostMac, vlanId, error);
+                        future.complete(null);
+                    });
             srManager.flowObjectiveService.forward(deviceId, install ? fob.add(context) : fob.remove(context));
         } else {
             log.warn("Failed to retrieve next objective for {}/{}", hostMac, vlanId);
+            return CompletableFuture.completedFuture(null);
         }
+        return future;
     }
 
     /**
@@ -1053,31 +1064,34 @@ public class RoutingRulePopulator {
         if (taggedVlans.size() != 0) {
             // Filter for tagged vlans
             if (!srManager.interfaceService.getTaggedVlanId(connectPoint).stream().allMatch(taggedVlanId ->
-                    processSinglePortFiltersInternal(deviceId, portnum, false, taggedVlanId, install))) {
+                    processSinglePortFiltersInternal(deviceId, portnum, false, taggedVlanId,
+                            install, false))) {
                 return false;
             }
             if (nativeVlan != null) {
                 // Filter for native vlan
-                if (!processSinglePortFiltersInternal(deviceId, portnum, true, nativeVlan, install)) {
+                if (!processSinglePortFiltersInternal(deviceId, portnum, true, nativeVlan,
+                        install, false)) {
                     return false;
                 }
             }
         } else if (untaggedVlan != null) {
             // Filter for untagged vlan
-            if (!processSinglePortFiltersInternal(deviceId, portnum, true, untaggedVlan, install)) {
+            if (!processSinglePortFiltersInternal(deviceId, portnum, true, untaggedVlan,
+                    install, false)) {
                 return false;
             }
         } else if (!hasIPConfiguration(connectPoint)) {
             // Filter for unconfigured upstream port, using INTERNAL_VLAN
             if (!processSinglePortFiltersInternal(deviceId, portnum, true,
                                                   srManager.getDefaultInternalVlan(),
-                                                  install)) {
+                                                  install, false)) {
                 return false;
             }
             // Filter for receiveing pseudowire traffic
             if (!processSinglePortFiltersInternal(deviceId, portnum, false,
                                                   srManager.getPwTransportVlan(),
-                                                  install)) {
+                                                  install, false)) {
                 return false;
             }
         }
@@ -1095,14 +1109,19 @@ public class RoutingRulePopulator {
      */
     void updateSinglePortFilters(DeviceId deviceId, PortNumber portNum,
                                  boolean pushVlan, VlanId vlanId, boolean install) {
-        if (!processSinglePortFiltersInternal(deviceId, portNum, pushVlan, vlanId, install)) {
+        // NOTE: update port filters is used only when the vlan configuration
+        //       has been updated. Port configuration is never removed here.
+        //       For pipeline sharing the TMAC entry among different vlans
+        //       there is no need to push or remove the TMAC entry
+        if (!processSinglePortFiltersInternal(deviceId, portNum, pushVlan, vlanId, install, true)) {
             log.warn("Failed to update FilteringObjective for {}/{} with vlan {}",
                      deviceId, portNum, vlanId);
         }
     }
 
     private boolean processSinglePortFiltersInternal(DeviceId deviceId, PortNumber portnum,
-                                                      boolean pushVlan, VlanId vlanId, boolean install) {
+                                                     boolean pushVlan, VlanId vlanId, boolean install,
+                                                     boolean update) {
         boolean doTMAC = true;
 
         if (!pushVlan) {
@@ -1119,7 +1138,7 @@ public class RoutingRulePopulator {
             }
         }
 
-        FilteringObjective.Builder fob = buildFilteringObjective(deviceId, portnum, pushVlan, vlanId, doTMAC);
+        FilteringObjective.Builder fob = buildFilteringObjective(deviceId, portnum, pushVlan, vlanId, doTMAC, update);
         if (fob == null) {
             // error encountered during build
             return false;
@@ -1140,7 +1159,8 @@ public class RoutingRulePopulator {
     }
 
     private FilteringObjective.Builder buildFilteringObjective(DeviceId deviceId, PortNumber portnum,
-                                                               boolean pushVlan, VlanId vlanId, boolean doTMAC) {
+                                                               boolean pushVlan, VlanId vlanId,
+                                                               boolean doTMAC, boolean update) {
         MacAddress deviceMac;
         try {
             deviceMac = config.getDeviceMac(deviceId);
@@ -1173,6 +1193,13 @@ public class RoutingRulePopulator {
         //       within the same VLAN on this device.
         if (noMoreEnabledPort(deviceId, vlanId)) {
             tBuilder.wipeDeferred();
+        }
+
+        // NOTE: Some switch hardware share the same tmac flow among different vlans.
+        //       We use this metadata to let the driver know that there is still a vlan
+        //       configuration associated to that port
+        if (update) {
+            tBuilder.writeMetadata(INTERFACE_CONFIG_UPDATE, METADATA_MASK);
         }
 
         fob.withMeta(tBuilder.build());
@@ -1257,9 +1284,9 @@ public class RoutingRulePopulator {
 
         // special metadata for driver
         if (cleanupDoubleTaggedRules) {
-            tBuilder.writeMetadata(CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES, DOUBLE_TAGGED_METADATA_MASK);
+            tBuilder.writeMetadata(CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES, METADATA_MASK);
         } else {
-            tBuilder.writeMetadata(0, DOUBLE_TAGGED_METADATA_MASK);
+            tBuilder.writeMetadata(0, METADATA_MASK);
         }
 
         // NOTE: Some switch hardware share the same filtering flow among different ports.
@@ -1677,9 +1704,11 @@ public class RoutingRulePopulator {
                 .fromApp(srManager.appId)
                 .makePermanent();
         ObjectiveContext context = new DefaultObjectiveContext(
-                (objective) -> log.debug("Vlan broadcast rule for {} populated", vlanId),
+                (objective) -> log.debug("Vlan broadcast rule for {} {}", vlanId, install ?
+                        "populated" : "removed"),
                 (objective, error) ->
-                        log.warn("Failed to populate vlan broadcast rule for {}: {}", vlanId, error));
+                        log.warn("Failed to {} vlan broadcast rule for {}: {}", install ? "populate" : "remove",
+                                vlanId, error));
 
         if (install) {
             srManager.flowObjectiveService.forward(deviceId, fob.add(context));
@@ -1705,9 +1734,11 @@ public class RoutingRulePopulator {
      * @param vlanId Vlan ID of the port
      * @param popVlan true to pop vlan tag in TrafficTreatment
      * @param install true to populate the forwarding objective, false to revoke
+     * @return a completable future that completes when the fwdobj completes. In case of removal,
+     * the completable future completes when also the nextobj completes.
      */
-    void updateFwdObj(DeviceId deviceId, PortNumber portNumber, IpPrefix prefix, MacAddress hostMac,
-                      VlanId vlanId, boolean popVlan, boolean install) {
+    CompletableFuture<Objective> updateFwdObj(DeviceId deviceId, PortNumber portNumber, IpPrefix prefix,
+                                              MacAddress hostMac, VlanId vlanId, boolean popVlan, boolean install) {
         ForwardingObjective.Builder fob;
         TrafficSelector.Builder sbuilder = buildIpSelectorFromIpPrefix(prefix);
         MacAddress deviceMac;
@@ -1715,7 +1746,7 @@ public class RoutingRulePopulator {
             deviceMac = config.getDeviceMac(deviceId);
         } catch (DeviceConfigNotFoundException e) {
             log.warn(e.getMessage() + " Aborting updateFwdObj.");
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         TrafficTreatment.Builder tbuilder = DefaultTrafficTreatment.builder();
@@ -1738,9 +1769,10 @@ public class RoutingRulePopulator {
         // the next-objective does not exist, then a new one should not be created
         int portNextObjId = srManager.getPortNextObjectiveId(deviceId, portNumber,
                                                              tbuilder.build(), mbuilder.build(), install);
+        CompletableFuture<Objective> future = new CompletableFuture<>();
         if (portNextObjId == -1) {
             // Warning log will come from getPortNextObjective method
-            return;
+            return CompletableFuture.completedFuture(null);
         }
 
         fob = DefaultForwardingObjective.builder().withSelector(sbuilder.build())
@@ -1748,10 +1780,15 @@ public class RoutingRulePopulator {
                 .withPriority(getPriorityFromPrefix(prefix)).withFlag(ForwardingObjective.Flag.SPECIFIC);
 
         ObjectiveContext context = new DefaultObjectiveContext(
-                (objective) -> log.debug("IP rule for route {} {}", prefix, install ? "installed" : "revoked"),
-                (objective, error) ->
-                        log.warn("Failed to {} IP rule for route {}: {}",
-                                 install ? "install" : "revoke", prefix, error));
+                (objective) -> {
+                    log.debug("IP rule for route {} {}", prefix, install ? "installed" : "revoked");
+                    future.complete(objective);
+                },
+                (objective, error) -> {
+                    log.warn("Failed to {} IP rule for route {}: {}", install ? "install" : "revoke",
+                            prefix, error);
+                    future.complete(null);
+                });
         srManager.flowObjectiveService.forward(deviceId, install ? fob.add(context) : fob.remove(context));
 
         if (!install) {
@@ -1761,11 +1798,19 @@ public class RoutingRulePopulator {
                 if (grpHandler == null) {
                     log.warn("updateFwdObj: groupHandler for device {} not found", deviceId);
                 } else {
-                    // Remove L3UG for the given port and host
-                    grpHandler.removeGroupFromPort(portNumber, tbuilder.build(), mbuilder.build());
+                    // Before moving forward we have to be sure flow has been removed;
+                    try {
+                        future.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        log.warn("Exception caught when executing IP rule removal for route {}", prefix);
+                    }
+                    // Remove L3UG for the given port and host and return the future
+                    // Flow future has been already consumed (normally or exceptionally)
+                    return grpHandler.removeGroupFromPort(portNumber, tbuilder.build(), mbuilder.build());
                 }
             }
         }
+        return future;
     }
 
     /**
@@ -1790,42 +1835,6 @@ public class RoutingRulePopulator {
             // interface is configured and either vlan-untagged or vlan-native matches given vlanId
             (srManager.getInternalVlanId(cp) != null && srManager.getInternalVlanId(cp).equals(vlanId))
         );
-    }
-
-    /**
-     * Returns a forwarding objective builder for egress forwarding rules.
-     * <p>
-     * The forwarding objective installs flow rules to egress pipeline to push
-     * two vlan headers with given inner, outer vlan ids and outer tpid.
-     *
-     * @param portNumber port where the next hop attaches to
-     * @param dummyVlanId vlan ID of the packet to match
-     * @param innerVlan inner vlan ID of the next hop
-     * @param outerVlan outer vlan ID of the next hop
-     * @param outerTpid outer TPID of the next hop
-     * @return forwarding objective builder
-     */
-    private ForwardingObjective.Builder egressFwdObjBuilder(PortNumber portNumber, VlanId dummyVlanId,
-                                                            VlanId innerVlan, VlanId outerVlan, EthType outerTpid) {
-        TrafficSelector.Builder sbuilder = DefaultTrafficSelector.builder();
-        sbuilder.matchVlanId(dummyVlanId);
-        TrafficTreatment.Builder tbuilder = DefaultTrafficTreatment.builder();
-        tbuilder.setOutput(portNumber).setVlanId(innerVlan);
-
-        if (outerTpid.equals(EthType.EtherType.QINQ.ethType())) {
-            tbuilder.pushVlan(outerTpid);
-        } else {
-            tbuilder.pushVlan();
-        }
-
-        tbuilder.setVlanId(outerVlan);
-        return DefaultForwardingObjective.builder()
-                .withSelector(sbuilder.build())
-                .withTreatment(tbuilder.build())
-                .fromApp(srManager.appId)
-                .makePermanent()
-                .withPriority(DEFAULT_PRIORITY)
-                .withFlag(ForwardingObjective.Flag.EGRESS);
     }
 
     /**
@@ -1884,7 +1893,6 @@ public class RoutingRulePopulator {
         ForwardingObjective.Builder fwdBuilder;
         log.debug("Revoking direct routing entry for double-tagged host route {} at {}:{}",
                 prefix, deviceId, outPort);
-
         try {
             fwdBuilder = routingFwdObjBuilder(deviceId, prefix, hostMac, outerVlan, outPort, innerVlan, outerTpid,
                     true, true);
@@ -1901,7 +1909,6 @@ public class RoutingRulePopulator {
         int nextId = fwdBuilder.remove().nextId();
         DefaultObjectiveContext context = new DefaultObjectiveContext(objective -> {
             log.debug("Direct routing rule for double-tagged host route {} revoked. nextId={}", prefix, nextId);
-
             // Try to remove next objective as well
             ImmutablePair<TrafficTreatment, TrafficSelector> treatmentAndMeta;
             try {
@@ -1910,12 +1917,10 @@ public class RoutingRulePopulator {
                 log.error(e.getMessage() + " Aborting revokeDoubleTaggedRoute");
                 return;
             }
-
             if (treatmentAndMeta == null) {
                 // Warning log will come from getTreatmentAndMeta method
                 return;
             }
-
             DefaultGroupHandler groupHandler = srManager.getGroupHandler(deviceId);
             if (groupHandler == null) {
                 log.warn("Failed to revoke direct routing rule for double-tagged host route {}: " +
