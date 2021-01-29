@@ -1687,7 +1687,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
     private void processPortUpdatedInternal(Device device, Port port) {
         if (deviceConfiguration == null || !deviceConfiguration.isConfigured(device.id())) {
-            log.warn("Device configuration uploading. Not handling port event for"
+            log.warn("Device configuration uploading. Not handling port event for "
                     + "dev: {} port: {}", device.id(), port.number());
             return;
         }
@@ -1697,7 +1697,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         }
 
         if (!mastershipService.isLocalMaster(device.id()))  {
-            log.debug("Not master for dev:{} .. not handling port updated event"
+            log.debug("Not master for dev:{} .. not handling port updated event "
                     + "for port {}", device.id(), port.number());
             return;
         }
