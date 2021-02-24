@@ -15,34 +15,35 @@
  */
 package org.onosproject.segmentrouting.cli;
 
-import org.apache.karaf.shell.api.action.Argument;
 import org.apache.karaf.shell.api.action.Command;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.PolicyService;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchData;
 
 /**
- * Command to remove a policy.
+ * Command to show the list of traffic matches.
  */
 @Service
-@Command(scope = "onos", name = "sr-policy-remove",
-        description = "Remove a policy")
-public class PolicyRemoveCommand extends AbstractShellCommand {
+@Command(scope = "onos", name = "sr-tmatch-list",
+        description = "Lists all traffic matches")
+public class TrafficMatchListCommand extends AbstractShellCommand {
 
-    @Argument(index = 0, name = "policyId",
-            description = "policy id",
-            required = true, multiValued = false)
-    String policyId;
+    private static final String FORMAT_MAPPING_TRAFFIC_MATCH =
+            "  id=%s, state=%s";
+    private static final String FORMAT_MAPPING_OPERATION =
+            "    op=%s";
 
     @Override
     protected void doExecute() {
         PolicyService policyService = AbstractShellCommand.get(PolicyService.class);
-        if (policyService.removePolicy(PolicyId.of(policyId))) {
-            print("Removing policy %s", policyId);
-        } else {
-            print("Unable to remove policy %s", policyId);
-        }
+        policyService.trafficMatches().forEach(this::printTrafficMatch);
+    }
+
+    private void printTrafficMatch(TrafficMatchData trafficMatchData) {
+        print(FORMAT_MAPPING_TRAFFIC_MATCH, trafficMatchData.trafficMatch().trafficMatchId(),
+                trafficMatchData.trafficMatchState());
+        trafficMatchData.operations().forEach(operation -> print(FORMAT_MAPPING_OPERATION, operation));
     }
 }

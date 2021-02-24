@@ -101,6 +101,13 @@ public interface DeviceProperties {
     boolean isEdgeDevice(DeviceId deviceId) throws DeviceConfigNotFoundException;
 
     /**
+     * Returns a list of edge devices.
+     *
+     * @return list of the edge device ids
+     */
+    List<DeviceId> getEdgeDeviceIds();
+
+    /**
      * Returns all segment IDs to be considered in building auto
      *
      * created groups.

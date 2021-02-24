@@ -17,31 +17,24 @@ package org.onosproject.segmentrouting.cli;
 
 import org.apache.karaf.shell.api.action.Command;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
+
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.segmentrouting.SegmentRoutingService;
-import org.onosproject.segmentrouting.Tunnel;
+import org.onosproject.segmentrouting.policy.api.DropPolicy;
+import org.onosproject.segmentrouting.policy.api.PolicyId;
+import org.onosproject.segmentrouting.policy.api.PolicyService;
 
 /**
- * Command to show the list of tunnels.
+ * Command to add a new drop policy.
  */
 @Service
-@Command(scope = "onos", name = "sr-tunnel-list",
-        description = "Lists all tunnels")
-public class TunnelListCommand extends AbstractShellCommand {
-
-    private static final String FORMAT_MAPPING =
-            "  id=%s, path=%s";
+@Command(scope = "onos", name = "sr-drop-policy-add",
+        description = "Create a new drop policy")
+public class DropPolicyAddCommand extends AbstractShellCommand {
 
     @Override
     protected void doExecute() {
-
-        SegmentRoutingService srService =
-                AbstractShellCommand.get(SegmentRoutingService.class);
-
-        srService.getTunnels().forEach(tunnel -> printTunnel(tunnel));
-    }
-
-    private void printTunnel(Tunnel tunnel) {
-        print(FORMAT_MAPPING, tunnel.id(), tunnel.labelIds());
+        PolicyService policyService = AbstractShellCommand.get(PolicyService.class);
+        PolicyId policyId = policyService.addOrUpdatePolicy(new DropPolicy());
+        print("Policy %s has been submitted", policyId);
     }
 }

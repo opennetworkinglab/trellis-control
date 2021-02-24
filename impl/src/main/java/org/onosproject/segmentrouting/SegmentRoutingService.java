@@ -436,4 +436,11 @@ public interface SegmentRoutingService {
     default Set<PortNumber> getEdgePorts(DeviceId deviceId) {
         throw new NotImplementedException("getEdgePorts not implemented");
     }
+
+    /**
+     * Returns a list of edge devices.
+     *
+     * @return list of the edge device ids
+     */
+    List<DeviceId> getEdgeDeviceIds();
 }

@@ -15,34 +15,36 @@
  */
 package org.onosproject.segmentrouting.cli;
 
+
 import org.apache.karaf.shell.api.action.Argument;
 import org.apache.karaf.shell.api.action.Command;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.PolicyService;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
 
 /**
- * Command to remove a policy.
+ * Command to remove a traffic match.
  */
 @Service
-@Command(scope = "onos", name = "sr-policy-remove",
-        description = "Remove a policy")
-public class PolicyRemoveCommand extends AbstractShellCommand {
+@Command(scope = "onos", name = "sr-tmatch-remove",
+        description = "Remove a traffic match")
+public class TrafficMatchRemoveCommand extends AbstractShellCommand {
 
-    @Argument(index = 0, name = "policyId",
-            description = "policy id",
+    @Argument(index = 0, name = "trafficMatchId",
+            description = "traffic match id",
             required = true, multiValued = false)
-    String policyId;
+    String trafficMatchId;
 
     @Override
     protected void doExecute() {
         PolicyService policyService = AbstractShellCommand.get(PolicyService.class);
-        if (policyService.removePolicy(PolicyId.of(policyId))) {
-            print("Removing policy %s", policyId);
+        trafficMatchId = trafficMatchId.replace("\\", "");
+        if (policyService.removeTrafficMatch(TrafficMatchId.of(trafficMatchId))) {
+            print("Removing traffic match %s", trafficMatchId);
         } else {
-            print("Unable to remove policy %s", policyId);
+            print("Unable to remove traffic match %s", trafficMatchId);
         }
     }
 }

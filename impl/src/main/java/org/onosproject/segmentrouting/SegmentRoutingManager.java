@@ -1199,6 +1199,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 .collect(Collectors.toSet());
     }
 
+    @Override
+    public List<DeviceId> getEdgeDeviceIds() {
+        return deviceConfiguration.getEdgeDeviceIds();
+    }
+
     /**
      * Returns locations of given resolved route.
      *

@@ -16,11 +16,16 @@
 package org.onosproject.segmentrouting.cli;
 
 import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Option;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
+import org.glassfish.jersey.internal.guava.Sets;
+
 import org.onosproject.cli.AbstractShellCommand;
-import org.onosproject.segmentrouting.Policy;
-import org.onosproject.segmentrouting.SegmentRoutingService;
-import org.onosproject.segmentrouting.TunnelPolicy;
+import org.onosproject.segmentrouting.policy.api.Policy;
+import org.onosproject.segmentrouting.policy.api.PolicyData;
+import org.onosproject.segmentrouting.policy.api.PolicyService;
+
+import java.util.Set;
 
 /**
  * Command to show the list of policies.
@@ -30,24 +35,37 @@ import org.onosproject.segmentrouting.TunnelPolicy;
         description = "Lists all policies")
 public class PolicyListCommand extends AbstractShellCommand {
 
-    private static final String FORMAT_MAPPING_TUNNEL =
-            "  id=%s, type=%s,  prio=%d, src=%s, port=%d, dst=%s, port=%d, proto=%s, tunnel=%s";
+    private static final String FORMAT_MAPPING_POLICY =
+            "  id=%s, state=%s, type=%s";
+    private static final String FORMAT_MAPPING_OPERATION =
+            "    op=%s";
+
+    @Option(name = "-filt", aliases = "--filter",
+            description = "Filter based on policy type",
+            valueToShowInHelp = "DROP",
+            multiValued = true)
+    String[] filters = null;
 
     @Override
     protected void doExecute() {
-
-        SegmentRoutingService srService =
-                AbstractShellCommand.get(SegmentRoutingService.class);
-
-        srService.getPolicies().forEach(policy -> printPolicy(policy));
+        PolicyService policyService =
+                AbstractShellCommand.get(PolicyService.class);
+        policyService.policies(policyTypes()).forEach(this::printPolicy);
     }
 
-    private void printPolicy(Policy policy) {
-        if (policy.type() == Policy.Type.TUNNEL_FLOW) {
-            print(FORMAT_MAPPING_TUNNEL, policy.id(), policy.type(), policy.priority(),
-                    policy.srcIp(), policy.srcPort(), policy.dstIp(), policy.dstPort(),
-                    (policy.ipProto() == null) ? "" : policy.ipProto(),
-                    ((TunnelPolicy) policy).tunnelId());
+    private Set<Policy.PolicyType> policyTypes() {
+        Set<Policy.PolicyType> policyTypes = Sets.newHashSet();
+        if (filters != null) {
+            for (String filter : filters) {
+                policyTypes.add(Policy.PolicyType.valueOf(filter));
+            }
         }
+        return policyTypes;
+    }
+
+    private void printPolicy(PolicyData policyData) {
+        print(FORMAT_MAPPING_POLICY, policyData.policy().policyId(), policyData.policyState(),
+                policyData.policy().policyType());
+        policyData.operations().forEach(operation -> print(FORMAT_MAPPING_OPERATION, operation));
     }
 }
