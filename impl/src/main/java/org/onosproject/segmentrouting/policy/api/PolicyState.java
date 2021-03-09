@@ -18,6 +18,7 @@ package org.onosproject.segmentrouting.policy.api;
 /**
  * Represents the state of a policy as seen by the system.
  */
+// TODO consider to add a FAILED state for an invalid policy that cannot be fulfilled even after a retry
 public enum PolicyState {
     /**
      * The policy is in the process of being added.

@@ -31,7 +31,7 @@ import java.util.Set;
  * Command to show the list of policies.
  */
 @Service
-@Command(scope = "onos", name = "sr-policy-list",
+@Command(scope = "onos", name = "sr-policy",
         description = "Lists all policies")
 public class PolicyListCommand extends AbstractShellCommand {
 
@@ -40,11 +40,11 @@ public class PolicyListCommand extends AbstractShellCommand {
     private static final String FORMAT_MAPPING_OPERATION =
             "    op=%s";
 
-    @Option(name = "-filt", aliases = "--filter",
+    @Option(name = "-t", aliases = "--type",
             description = "Filter based on policy type",
             valueToShowInHelp = "DROP",
             multiValued = true)
-    String[] filters = null;
+    String[] types = null;
 
     @Override
     protected void doExecute() {
@@ -55,8 +55,8 @@ public class PolicyListCommand extends AbstractShellCommand {
 
     private Set<Policy.PolicyType> policyTypes() {
         Set<Policy.PolicyType> policyTypes = Sets.newHashSet();
-        if (filters != null) {
-            for (String filter : filters) {
+        if (types != null) {
+            for (String filter : types) {
                 policyTypes.add(Policy.PolicyType.valueOf(filter));
             }
         }

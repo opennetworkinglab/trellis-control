@@ -780,11 +780,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         return true;
     }
 
-    /**
-     * Returns the VlanId assigned internally by default to unconfigured ports.
-     *
-     * @return the default internal vlan id
-     */
+    @Override
     public VlanId getDefaultInternalVlan() {
         return VlanId.vlanId((short) defaultInternalVlan);
     }
@@ -1202,6 +1198,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     @Override
     public List<DeviceId> getEdgeDeviceIds() {
         return deviceConfiguration.getEdgeDeviceIds();
+    }
+
+    @Override
+    public MacAddress getDeviceMacAddress(DeviceId deviceId) throws DeviceConfigNotFoundException {
+        return deviceConfiguration.getDeviceMac(deviceId);
     }
 
     /**

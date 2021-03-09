@@ -26,12 +26,12 @@ import org.onosproject.segmentrouting.policy.api.TrafficMatchData;
  * Command to show the list of traffic matches.
  */
 @Service
-@Command(scope = "onos", name = "sr-tmatch-list",
+@Command(scope = "onos", name = "sr-tm",
         description = "Lists all traffic matches")
 public class TrafficMatchListCommand extends AbstractShellCommand {
 
     private static final String FORMAT_MAPPING_TRAFFIC_MATCH =
-            "  id=%s, state=%s";
+            "  id=%s, state=%s, policyId=%s";
     private static final String FORMAT_MAPPING_OPERATION =
             "    op=%s";
 
@@ -43,7 +43,7 @@ public class TrafficMatchListCommand extends AbstractShellCommand {
 
     private void printTrafficMatch(TrafficMatchData trafficMatchData) {
         print(FORMAT_MAPPING_TRAFFIC_MATCH, trafficMatchData.trafficMatch().trafficMatchId(),
-                trafficMatchData.trafficMatchState());
+                trafficMatchData.trafficMatchState(), trafficMatchData.trafficMatch().policyId());
         trafficMatchData.operations().forEach(operation -> print(FORMAT_MAPPING_OPERATION, operation));
     }
 }

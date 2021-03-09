@@ -167,6 +167,8 @@ final class Operation {
 
     /**
      * Creates a new operation builder using the supplied operation.
+     * The boolean isDone and the objective operation won't be copied
+     * by the supplied operation.
      *
      * @param operation the operation
      * @return an operation builder
@@ -191,8 +193,6 @@ final class Operation {
 
         private Builder(Operation operation) {
             isInstall = operation.isInstall();
-            isDone = operation.isDone();
-            objectiveOperation = operation.objectiveOperation();
             policy = operation.policy().orElse(null);
             trafficMatch = operation.trafficMatch().orElse(null);
         }

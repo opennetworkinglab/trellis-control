@@ -17,6 +17,7 @@ package org.onosproject.segmentrouting.cli;
 
 import org.apache.karaf.shell.api.action.Argument;
 import org.apache.karaf.shell.api.action.Command;
+import org.apache.karaf.shell.api.action.Option;
 import org.apache.karaf.shell.api.action.lifecycle.Service;
 
 import org.onlab.packet.IPv4;
@@ -37,7 +38,7 @@ import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
  * Command to add a traffic match.
  */
 @Service
-@Command(scope = "onos", name = "sr-tmatch-add",
+@Command(scope = "onos", name = "sr-tm-add",
         description = "Create a new traffic match")
 public class TrafficMatchAddCommand extends AbstractShellCommand {
 
@@ -46,44 +47,53 @@ public class TrafficMatchAddCommand extends AbstractShellCommand {
             required = true, multiValued = false)
     String policyId;
 
-    @Argument(index = 1, name = "srcIp",
+    @Option(name = "-sip", aliases = "--srcIp",
             description = "src IP",
-            required = false, multiValued = false)
+            valueToShowInHelp = "10.0.0.1",
+            multiValued = false)
     String srcIp;
 
-    @Argument(index = 2, name = "srcPort",
+    @Option(name = "-sp", aliases = "--srcPort",
             description = "src port",
-            required = false, multiValued = false)
+            valueToShowInHelp = "1001",
+            multiValued = false)
     short srcPort;
 
-    @Argument(index = 3, name = "dstIp",
+    @Option(name = "-dip", aliases = "--dstIp",
             description = "dst IP",
-            required = false, multiValued = false)
+            valueToShowInHelp = "10.0.0.2",
+            multiValued = false)
     String dstIp;
 
-    @Argument(index = 4, name = "dstPort",
+    @Option(name = "-dp", aliases = "--dstPort",
             description = "dst port",
-            required = false, multiValued = false)
+            valueToShowInHelp = "1002",
+            multiValued = false)
     short dstPort;
 
-    @Argument(index = 5, name = "proto",
+    @Option(name = "-p", aliases = "--proto",
             description = "IP protocol",
-            required = false, multiValued = false)
+            valueToShowInHelp = "0x11",
+            multiValued = false)
     String proto;
 
-    @Argument(index = 6, name = "srcMac",
+    // TODO Consider to filter out the following fields for red policies
+    @Option(name = "-smac", aliases = "--srcMac",
             description = "src MAC",
-            required = false, multiValued = false)
+            valueToShowInHelp = "00:00:00:00:00:01",
+            multiValued = false)
     String srcMac;
 
-    @Argument(index = 7, name = "dstMac",
+    @Option(name = "-dmac", aliases = "--dstMac",
             description = "dst MAC",
-            required = false, multiValued = false)
+            valueToShowInHelp = "00:00:00:00:00:02",
+            multiValued = false)
     String dstMac;
 
-    @Argument(index = 8, name = "vlanId",
-            description = "VLAN id",
-            required = false, multiValued = false)
+    @Option(name = "-vid", aliases = "--VlanId",
+            description = "vlan ID",
+            valueToShowInHelp = "10",
+            multiValued = false)
     short vlanId = -1;
 
     @Override

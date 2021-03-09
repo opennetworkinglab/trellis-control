@@ -28,7 +28,7 @@ import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
  * Command to remove a traffic match.
  */
 @Service
-@Command(scope = "onos", name = "sr-tmatch-remove",
+@Command(scope = "onos", name = "sr-tm-remove",
         description = "Remove a traffic match")
 public class TrafficMatchRemoveCommand extends AbstractShellCommand {
 

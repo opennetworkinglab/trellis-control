@@ -18,6 +18,7 @@ package org.onosproject.segmentrouting.policy.api;
 /**
  * Represents the state of a traffic match as seen by the system.
  */
+// TODO consider to add a FAILED state for an invalid traffic match that cannot be fulfilled even after a retry
 public enum TrafficMatchState {
     /**
      * The traffic match is in the process of being added.

@@ -27,9 +27,9 @@ import org.onosproject.segmentrouting.policy.api.PolicyService;
  * Command to add a new drop policy.
  */
 @Service
-@Command(scope = "onos", name = "sr-drop-policy-add",
+@Command(scope = "onos", name = "sr-policy-drop-add",
         description = "Create a new drop policy")
-public class DropPolicyAddCommand extends AbstractShellCommand {
+public class PolicyDropAddCommand extends AbstractShellCommand {
 
     @Override
     protected void doExecute() {

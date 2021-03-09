@@ -22,7 +22,12 @@ import java.util.Objects;
 import java.util.StringTokenizer;
 
 /**
- * Traffic match key used by the store.
+ * Traffic match key used by the store to track the operations ongoing on the devices.
+ *
+ * Traffic match is the high level intent expressed by the user that gets translated by
+ * the PolicyManager in modifications operated on the devices. The policy operations
+ * are more important than the policy itself without them the policy cannot be
+ * considered fulfilled.
  */
 public class TrafficMatchKey {
     private DeviceId deviceId;

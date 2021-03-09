@@ -42,6 +42,13 @@ public abstract class AbstractPolicy implements Policy {
         return policyType;
     }
 
+    /**
+     * Computes the policy id. The actual computation is left to
+     * the implementation class that can decide how to generate the
+     * policy id.
+     *
+     * @return the computed policy id
+     */
     protected abstract PolicyId computePolicyId();
 
 }

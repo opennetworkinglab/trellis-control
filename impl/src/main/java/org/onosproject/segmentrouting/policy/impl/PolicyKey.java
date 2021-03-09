@@ -22,7 +22,12 @@ import java.util.Objects;
 import java.util.StringTokenizer;
 
 /**
- * Policy key used by the store.
+ * Policy key used by the store to track the operations ongoing on the devices.
+ *
+ * Policy is the high level intent expressed by the user that gets translated by
+ * the PolicyManager in modifications operated on the devices. The policy operations
+ * are more important than the policy itself without them the policy cannot be
+ * considered fulfilled.
  */
 public class PolicyKey {
     private DeviceId deviceId;
