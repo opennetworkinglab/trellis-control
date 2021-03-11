@@ -1,0 +1,28 @@
+{
+  "traffic_match_id": "-1756753738",
+  "policy_id": "DROP",
+  "selector": {
+    "criteria": [
+      {
+        "type": "IP_PROTO",
+        "protocol": 6
+      },
+      {
+        "type": "IPV4_SRC",
+        "ip": "10.0.0.1/32"
+      },
+      {
+        "type": "IPV4_DST",
+        "ip": "10.0.0.2/32"
+      },
+      {
+        "type": "TCP_SRC",
+        "tcpPort": 80
+      },
+      {
+        "type": "TCP_DST",
+        "tcpPort": 81
+      }
+    ]
+  }
+}

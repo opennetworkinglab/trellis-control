@@ -26,6 +26,7 @@ import org.onlab.util.KryoNamespace;
 import org.onlab.util.PredictableExecutor;
 import org.onosproject.cluster.ClusterService;
 import org.onosproject.cluster.NodeId;
+import org.onosproject.codec.CodecService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
 import org.onosproject.net.ConnectPoint;
@@ -48,6 +49,7 @@ import org.onosproject.net.link.LinkService;
 import org.onosproject.segmentrouting.SegmentRoutingService;
 import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
 import org.onosproject.segmentrouting.policy.api.DropPolicy;
+import org.onosproject.segmentrouting.policy.api.DropPolicyCodec;
 import org.onosproject.segmentrouting.policy.api.Policy;
 import org.onosproject.segmentrouting.policy.api.Policy.PolicyType;
 import org.onosproject.segmentrouting.policy.api.PolicyData;
@@ -55,7 +57,9 @@ import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.PolicyService;
 import org.onosproject.segmentrouting.policy.api.PolicyState;
 import org.onosproject.segmentrouting.policy.api.RedirectPolicy;
+import org.onosproject.segmentrouting.policy.api.RedirectPolicyCodec;
 import org.onosproject.segmentrouting.policy.api.TrafficMatch;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchCodec;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchData;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchState;
@@ -153,6 +157,9 @@ public class PolicyManager implements PolicyService {
     private CoreService coreService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
+    private CodecService codecService;
+
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private StorageService storageService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
@@ -161,7 +168,7 @@ public class PolicyManager implements PolicyService {
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private WorkPartitionService workPartitionService;
 
-    @Reference(cardinality = ReferenceCardinality.OPTIONAL)
+    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private SegmentRoutingService srService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
@@ -173,6 +180,10 @@ public class PolicyManager implements PolicyService {
     @Activate
     public void activate() {
         appId = coreService.registerApplication(APP_NAME);
+
+        codecService.registerCodec(DropPolicy.class, new DropPolicyCodec());
+        codecService.registerCodec(RedirectPolicy.class, new RedirectPolicyCodec());
+        codecService.registerCodec(TrafficMatch.class, new TrafficMatchCodec());
 
         policies = storageService.<PolicyId, PolicyRequest>consistentMapBuilder()
                 .withName(POLICY_STORE)
@@ -203,6 +214,9 @@ public class PolicyManager implements PolicyService {
     @Deactivate
     public void deactivate() {
         // Teardown everything
+        codecService.unregisterCodec(DropPolicy.class);
+        codecService.unregisterCodec(RedirectPolicy.class);
+        codecService.unregisterCodec(TrafficMatch.class);
         policies.removeListener(mapPolListener);
         policies.destroy();
         policiesMap.clear();

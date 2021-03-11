@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "title": "redirect-policy-creation",
+  "required": [
+    "spinesToEnforce"
+  ],
+  "properties": {
+    "spinesToEnforce": {
+      "type": "object",
+      "title": "spinesToEnforce",
+      "required": [
+        "deviceId"
+      ],
+      "properties": {
+        "deviceId": {
+          "type": "array",
+          "xml": {
+            "name": "deviceId",
+            "wrapped": true
+          },
+          "items": {
+            "type": "string",
+            "title": "deviceId",
+            "example": "of:0000000000000001",
+            "description": "deviceId of spines to enforce"
+          },
+          "description": "Array of deviceId"
+        }
+      }
+    }
+  }
+}

@@ -29,7 +29,8 @@ public class SegmentRoutingWebApplication extends AbstractWebApplication {
         return getClasses(
                 PseudowireWebResource.class,
                 McastWebResource.class,
-                XconnectWebResource.class
+                XconnectWebResource.class,
+                PolicyWebResource.class
         );
     }
 }
