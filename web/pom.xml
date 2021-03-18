@@ -42,10 +42,16 @@
     </properties>
 
     <dependencies>
-        <!-- Trellis impl -->
+        <!-- Trellis -->
         <dependency>
             <groupId>org.onosproject</groupId>
             <artifactId>segmentrouting-impl</artifactId>
+            <version>${project.parent.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.onosproject</groupId>
+            <artifactId>segmentrouting-api</artifactId>
             <version>${project.parent.version}</version>
             <scope>provided</scope>
         </dependency>

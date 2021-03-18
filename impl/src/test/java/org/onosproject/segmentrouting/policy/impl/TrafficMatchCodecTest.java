@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onosproject.segmentrouting.policy.api;
+package org.onosproject.segmentrouting.policy.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,6 +28,8 @@ import org.onosproject.codec.JsonCodec;
 import org.onosproject.codec.impl.MockCodecContext;
 import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.TrafficSelector;
+import org.onosproject.segmentrouting.policy.api.PolicyId;
+import org.onosproject.segmentrouting.policy.api.TrafficMatch;
 
 import java.io.InputStream;
 

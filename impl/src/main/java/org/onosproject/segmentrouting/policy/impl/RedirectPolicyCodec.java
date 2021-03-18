@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onosproject.segmentrouting.policy.api;
+package org.onosproject.segmentrouting.policy.impl;
 
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.onosproject.codec.CodecContext;
 import org.onosproject.codec.JsonCodec;
 import org.onosproject.net.DeviceId;
+import org.onosproject.segmentrouting.policy.api.RedirectPolicy;
 
 import java.util.LinkedList;
 import java.util.List;

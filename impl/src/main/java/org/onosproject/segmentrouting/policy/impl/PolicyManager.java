@@ -47,22 +47,19 @@ import org.onosproject.net.flowobjective.ObjectiveContext;
 import org.onosproject.net.intent.WorkPartitionService;
 import org.onosproject.net.link.LinkService;
 import org.onosproject.segmentrouting.SegmentRoutingService;
-import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
 import org.onosproject.segmentrouting.policy.api.DropPolicy;
-import org.onosproject.segmentrouting.policy.api.DropPolicyCodec;
 import org.onosproject.segmentrouting.policy.api.Policy;
-import org.onosproject.segmentrouting.policy.api.Policy.PolicyType;
 import org.onosproject.segmentrouting.policy.api.PolicyData;
 import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.PolicyService;
 import org.onosproject.segmentrouting.policy.api.PolicyState;
 import org.onosproject.segmentrouting.policy.api.RedirectPolicy;
-import org.onosproject.segmentrouting.policy.api.RedirectPolicyCodec;
 import org.onosproject.segmentrouting.policy.api.TrafficMatch;
-import org.onosproject.segmentrouting.policy.api.TrafficMatchCodec;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchData;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchState;
+import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
+import org.onosproject.segmentrouting.policy.api.Policy.PolicyType;
 import org.onosproject.store.serializers.KryoNamespaces;
 import org.onosproject.store.service.ConsistentMap;
 import org.onosproject.store.service.MapEvent;
@@ -101,7 +98,7 @@ public class PolicyManager implements PolicyService {
     static final String KEY_SEPARATOR = "|";
 
     // Supported policies
-    private static final Set<Policy.PolicyType> SUPPORTED_POLICIES = ImmutableSet.of(
+    private static final Set<PolicyType> SUPPORTED_POLICIES = ImmutableSet.of(
             PolicyType.DROP, PolicyType.REDIRECT);
 
     // Driver should use this meta to match port_is_edge field in the ACL table

@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.onosproject.segmentrouting.policy.api;
+package org.onosproject.segmentrouting.policy.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +24,7 @@ import org.junit.Test;
 import org.onosproject.codec.CodecContext;
 import org.onosproject.codec.JsonCodec;
 import org.onosproject.codec.impl.MockCodecContext;
+import org.onosproject.segmentrouting.policy.api.DropPolicy;
 
 import java.io.InputStream;
 
