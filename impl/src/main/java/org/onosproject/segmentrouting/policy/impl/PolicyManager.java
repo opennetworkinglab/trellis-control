@@ -101,9 +101,8 @@ public class PolicyManager implements PolicyService {
     private static final Set<PolicyType> SUPPORTED_POLICIES = ImmutableSet.of(
             PolicyType.DROP, PolicyType.REDIRECT);
 
-    // Driver should use this meta to match port_is_edge field in the ACL table
+    // Driver should use this meta to match ig_port_type field in the ACL table
     private static final long EDGE_PORT = 1;
-    private static final long INFRA_PORT = 0;
 
     // Policy/TrafficMatch store related objects. We use these consistent maps to keep track of the
     // lifecycle of a policy/traffic match. These are decomposed in multiple operations which have
