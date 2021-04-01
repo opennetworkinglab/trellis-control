@@ -16,6 +16,7 @@
 package org.onosproject.segmentrouting;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.collect.HashMultimap;
@@ -36,6 +37,7 @@ import org.onosproject.net.HostId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.ConfigException;
 import org.onosproject.net.config.basics.BasicDeviceConfig;
+import org.onosproject.net.config.basics.BasicHostConfig;
 import org.onosproject.net.config.basics.InterfaceConfig;
 import org.onosproject.net.host.InterfaceIpAddress;
 import org.onosproject.net.intf.Interface;
@@ -70,6 +72,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class DeviceConfiguration implements DeviceProperties {
 
     private static final String NO_SUBNET = "No subnet configured on {}";
+    // Key for BasicHostConfig
+    private static final String BASIC_KEY = "basic";
 
     private static final Logger log = LoggerFactory.getLogger(DeviceConfiguration.class);
     private final List<Integer> allSegmentIds = new ArrayList<>();
@@ -137,10 +141,11 @@ public class DeviceConfiguration implements DeviceProperties {
             info.pwRoutingLabel = info.ipv4NodeSid + 1000;
             deviceConfigMap.put(info.deviceId, info);
             log.debug("Read device config for device: {}", info.deviceId);
-            /*
-             * IPv6 sid is not inserted. this part of the code is not used for now.
-             */
+            // IPv6 sid is not inserted. this part of the code is not used for now.
             allSegmentIds.add(info.ipv4NodeSid);
+
+            // Block host with routerMac and untagged VLAN
+            blockHost(info.mac, VlanId.NONE);
         });
 
         // Read gatewayIps and subnets from port subject. Ignore suppressed ports.
@@ -166,7 +171,7 @@ public class DeviceConfiguration implements DeviceProperties {
                 MacAddress mac = networkInterface.mac();
                 SegmentRouterInfo info = deviceConfigMap.get(dpid);
 
-                // skip if there is no corresponding device for this ConenctPoint
+                // skip if there is no corresponding device for this ConnectPoint
                 if (info != null) {
                     // Extract subnet information
                     List<InterfaceIpAddress> interfaceAddresses = networkInterface.ipAddressesList();
@@ -196,11 +201,30 @@ public class DeviceConfiguration implements DeviceProperties {
                         }
                         srManager.cfgService.applyConfig(connectPoint, InterfaceConfig.class, array);
                     }
+
+                    // Block host with routerMac and taggedVlan
+                    networkInterface.vlanTagged().forEach(taggedVlan -> {
+                        blockHost(info.mac, taggedVlan);
+                    });
                 }
             });
             // We register the connect point with the NRS.
             srManager.registerConnectPoint(subject);
         });
+    }
+
+    private void blockHost(MacAddress macAddress, VlanId vlanId) {
+        HostId hostId = HostId.hostId(macAddress, vlanId);
+        BasicHostConfig hostConfig = srManager.cfgService.getConfig(hostId, BasicHostConfig.class);
+        if (hostConfig == null) {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode jsonNode = mapper.createObjectNode();
+            hostConfig = new BasicHostConfig();
+            hostConfig.init(hostId, BASIC_KEY, jsonNode, mapper, config -> { });
+        }
+        hostConfig.isAllowed(false);
+        srManager.cfgService.applyConfig(hostId, BasicHostConfig.class, hostConfig.node());
+        log.info("Blocking {} from being learnt as host", hostId);
     }
 
     public Collection<DeviceId> getRouters() {

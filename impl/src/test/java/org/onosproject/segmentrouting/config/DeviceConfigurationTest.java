@@ -28,9 +28,11 @@ import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
+import org.onosproject.net.HostId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.NetworkConfigRegistry;
 import org.onosproject.net.config.basics.BasicDeviceConfig;
+import org.onosproject.net.config.basics.BasicHostConfig;
 import org.onosproject.net.config.basics.InterfaceConfig;
 import org.onosproject.net.host.InterfaceIpAddress;
 import org.onosproject.net.intf.Interface;
@@ -59,6 +61,8 @@ public class DeviceConfigurationTest {
     private static final ConnectPoint CP1 = new ConnectPoint(DEV1, PORT1);
     private static final ConnectPoint CP2 = new ConnectPoint(DEV1, PORT2);
     private static final MacAddress MAC1 = MacAddress.valueOf("00:11:22:33:44:55");
+    private static final MacAddress ROUTER_MAC = MacAddress.valueOf("00:00:00:00:01:80");
+    private static final HostId ROUTER_HOST = HostId.hostId(ROUTER_MAC, VlanId.NONE);
     private static final VlanId VLAN1 = VlanId.vlanId((short) 10);
     private static final VlanId VLAN2 = VlanId.vlanId((short) 20);
     private static final IpPrefix PREFIX1 = IpPrefix.valueOf("10.0.1.254/24");
@@ -101,10 +105,16 @@ public class DeviceConfigurationTest {
         jsonNode = mapper.readTree(jsonStream);
         InterfaceConfig interfaceConfig1 = new InterfaceConfig();
         interfaceConfig1.init(CP1, CONFIG_KEY, jsonNode, mapper, config -> { });
+
         jsonStream = InterfaceConfig.class.getResourceAsStream("/interface2.json");
         jsonNode = mapper.readTree(jsonStream);
         InterfaceConfig interfaceConfig2 = new InterfaceConfig();
         interfaceConfig2.init(CP1, CONFIG_KEY, jsonNode, mapper, config -> { });
+
+        jsonStream = BasicHostConfig.class.getResourceAsStream("/host1.json");
+        jsonNode = mapper.readTree(jsonStream);
+        BasicHostConfig hostConfig1 = new BasicHostConfig();
+        hostConfig1.init(ROUTER_HOST, "basic", jsonNode, mapper, config -> { });
 
         networkConfigService = createMock(NetworkConfigRegistry.class);
         expect(networkConfigService.getSubjects(DeviceId.class, SegmentRoutingDeviceConfig.class))
@@ -126,6 +136,9 @@ public class DeviceConfigurationTest {
         expect(networkConfigService.applyConfig(eq(CP2), eq(InterfaceConfig.class), anyObject()))
                 .andReturn(interfaceConfig2).anyTimes();
         expect(networkConfigService.getConfig(null, SegmentRoutingAppConfig.class)).andReturn(null).anyTimes();
+        expect(networkConfigService.getConfig(ROUTER_HOST, BasicHostConfig.class)).andReturn(hostConfig1).anyTimes();
+        expect(networkConfigService.applyConfig(eq(ROUTER_HOST), eq(BasicHostConfig.class), anyObject()))
+                .andReturn(hostConfig1).anyTimes();
         replay(networkConfigService);
 
         interfaceService = createMock(InterfaceService.class);
