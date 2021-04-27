@@ -57,6 +57,7 @@ import org.onosproject.segmentrouting.policy.api.RedirectPolicy;
 import org.onosproject.segmentrouting.policy.api.TrafficMatch;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchData;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchPriority;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchState;
 import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
 import org.onosproject.segmentrouting.policy.api.Policy.PolicyType;
@@ -144,6 +145,7 @@ public class PolicyManager implements PolicyService {
             .register(PolicyRequest.class)
             .register(TrafficMatchId.class)
             .register(TrafficMatchState.class)
+            .register(TrafficMatchPriority.class)
             .register(TrafficMatch.class)
             .register(TrafficMatchRequest.class)
             .register(Operation.class);
@@ -794,7 +796,7 @@ public class PolicyManager implements PolicyService {
             metaBuilder.matchMetadata(EDGE_PORT);
         }
         return DefaultForwardingObjective.builder()
-                .withPriority(PolicyService.TRAFFIC_MATCH_PRIORITY)
+                .withPriority(trafficMatch.trafficMatchPriority().priority())
                 .withSelector(trafficMatch.trafficSelector())
                 .withMeta(metaBuilder.build())
                 .fromApp(appId)

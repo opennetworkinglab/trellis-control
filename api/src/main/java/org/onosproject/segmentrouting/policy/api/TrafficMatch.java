@@ -34,17 +34,34 @@ public final class TrafficMatch {
     private TrafficMatchId trafficMatchId;
     private TrafficSelector trafficSelector;
     private PolicyId policyId;
+    private TrafficMatchPriority trafficMatchPriority;
 
     /**
      * Builds a traffic match.
      *
-     * @param trafficselector the traffic selector
-     * @param policyid the associated policy id
+     * @param trafficSelector the traffic selector
+     * @param policyId the associated policy id
+     * @deprecated in version 3.0.2
      */
-    public TrafficMatch(TrafficSelector trafficselector, PolicyId policyid) {
-        trafficSelector = trafficselector;
-        trafficMatchId = TrafficMatchId.trafficMatchId(computeTrafficMatchId());
-        policyId = policyid;
+    public TrafficMatch(TrafficSelector trafficSelector, PolicyId policyId) {
+        this.trafficSelector = trafficSelector;
+        this.trafficMatchId = TrafficMatchId.trafficMatchId(computeTrafficMatchId());
+        this.policyId = policyId;
+        this.trafficMatchPriority = new TrafficMatchPriority(PolicyService.TRAFFIC_MATCH_PRIORITY);
+    }
+
+    /**
+     * Builds a traffic match.
+     *
+     * @param trafficSelector the traffic selector
+     * @param policyId the associated policy id
+     * @param trafficMatchPriority the priority
+     */
+    public TrafficMatch(TrafficSelector trafficSelector, PolicyId policyId, TrafficMatchPriority trafficMatchPriority) {
+        this.trafficSelector = trafficSelector;
+        this.trafficMatchId = TrafficMatchId.trafficMatchId(computeTrafficMatchId());
+        this.policyId = policyId;
+        this.trafficMatchPriority = trafficMatchPriority;
     }
 
     /**
@@ -74,9 +91,18 @@ public final class TrafficMatch {
         return trafficSelector;
     }
 
+    /**
+     * Returns the priority.
+     *
+     * @return the priority
+     */
+    public TrafficMatchPriority trafficMatchPriority() {
+        return trafficMatchPriority;
+    }
+
     @Override
     public int hashCode() {
-        return Objects.hash(trafficMatchId, trafficSelector, policyId);
+        return Objects.hash(trafficMatchId, trafficSelector, policyId, trafficMatchPriority);
     }
 
     @Override
@@ -88,7 +114,8 @@ public final class TrafficMatch {
             final TrafficMatch other = (TrafficMatch) obj;
             return Objects.equals(this.trafficMatchId, other.trafficMatchId) &&
                     Objects.equals(trafficSelector, other.trafficSelector) &&
-                    Objects.equals(policyId, other.policyId);
+                    Objects.equals(policyId, other.policyId) &&
+                    Objects.equals(trafficMatchPriority, other.trafficMatchPriority);
         }
         return false;
     }
@@ -99,6 +126,7 @@ public final class TrafficMatch {
                 .add("trafficMatchId", trafficMatchId)
                 .add("trafficSelector", trafficSelector)
                 .add("policyId", policyId)
+                .add("trafficMatchPriority", trafficMatchPriority)
                 .toString();
     }
 

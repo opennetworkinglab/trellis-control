@@ -33,6 +33,7 @@ import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.PolicyService;
 import org.onosproject.segmentrouting.policy.api.TrafficMatch;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchPriority;
 
 /**
  * Command to add a traffic match.
@@ -46,6 +47,11 @@ public class TrafficMatchAddCommand extends AbstractShellCommand {
             description = "policy id",
             required = true, multiValued = false)
     String policyId;
+
+    @Argument(index = 1, name = "priority",
+            description = "priority",
+            required = true, multiValued = false)
+    int priority;
 
     @Option(name = "-sip", aliases = "--srcIp",
             description = "src IP",
@@ -103,10 +109,17 @@ public class TrafficMatchAddCommand extends AbstractShellCommand {
             print("Empty traffic selector is not allowed");
             return;
         }
+        TrafficMatchPriority trafficMatchPriority;
+        try {
+            trafficMatchPriority = new TrafficMatchPriority(priority);
+        } catch (IllegalArgumentException ex) {
+            print(ex.getMessage());
+            return;
+        }
 
         PolicyService policyService = AbstractShellCommand.get(PolicyService.class);
         TrafficMatchId trafficMatchId = policyService.addOrUpdateTrafficMatch(
-                new TrafficMatch(trafficSelector, PolicyId.of(policyId)));
+                new TrafficMatch(trafficSelector, PolicyId.of(policyId), trafficMatchPriority));
         print("Traffic match %s has been submitted", trafficMatchId);
     }
 

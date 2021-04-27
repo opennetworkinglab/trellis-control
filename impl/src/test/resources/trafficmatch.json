@@ -1,6 +1,7 @@
 {
   "traffic_match_id": "-1756753738",
   "policy_id": "DROP",
+  "priority": 60000,
   "selector": {
     "criteria": [
       {

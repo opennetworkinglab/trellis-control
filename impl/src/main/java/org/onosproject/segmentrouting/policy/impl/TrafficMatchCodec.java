@@ -22,6 +22,7 @@ import org.onosproject.codec.JsonCodec;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.TrafficMatch;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchPriority;
 
 import static org.onlab.util.Tools.nullIsIllegal;
 
@@ -34,6 +35,7 @@ public final class TrafficMatchCodec extends JsonCodec<TrafficMatch> {
     public static final String TRAFFIC_MATCH_ID = "traffic_match_id";
     public static final String TRAFFIC_SELECTOR = "selector";
     public static final String POLICY_ID = "policy_id";
+    public static final String TRAFFIC_MATCH_PRIORITY = "priority";
     public static final String MISSING_MEMBER_MESSAGE =
             " member is required in Traffic Match";
 
@@ -46,6 +48,7 @@ public final class TrafficMatchCodec extends JsonCodec<TrafficMatch> {
         final ObjectNode result = context.mapper().createObjectNode()
                 .put(TRAFFIC_MATCH_ID, trafficMatch.trafficMatchId().toString())
                 .put(POLICY_ID, trafficMatch.policyId().toString())
+                .put(TRAFFIC_MATCH_PRIORITY, trafficMatch.trafficMatchPriority().priority())
                 .set(TRAFFIC_SELECTOR, selector);
 
         return result;
@@ -63,6 +66,15 @@ public final class TrafficMatchCodec extends JsonCodec<TrafficMatch> {
         PolicyId policyId = PolicyId.of(nullIsIllegal(json.get(POLICY_ID),
                 POLICY_ID + MISSING_MEMBER_MESSAGE).asText());
 
-        return new TrafficMatch(trafficSelector, policyId);
+        int priority = nullIsIllegal(json.get(TRAFFIC_MATCH_PRIORITY),
+                TRAFFIC_MATCH_PRIORITY + MISSING_MEMBER_MESSAGE).asInt();
+        TrafficMatchPriority trafficMatchPriority;
+        try {
+            trafficMatchPriority = new TrafficMatchPriority(priority);
+        } catch (IllegalArgumentException ex) {
+            throw ex;
+        }
+
+        return new TrafficMatch(trafficSelector, policyId, trafficMatchPriority);
     }
 }

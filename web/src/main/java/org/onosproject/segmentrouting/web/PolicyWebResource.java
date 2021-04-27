@@ -252,7 +252,7 @@ public class PolicyWebResource extends AbstractWebResource {
             }
             policyService.addOrUpdateTrafficMatch(trafficMatch);
             root.put(TRAFFIC_MATCH_ID, trafficMatch.trafficMatchId().toString());
-        } catch (IOException ex) {
+        } catch (IOException | IllegalArgumentException ex) {
             throw new IllegalArgumentException(ex);
         }
 

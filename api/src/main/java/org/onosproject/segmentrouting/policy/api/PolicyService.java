@@ -23,7 +23,9 @@ import java.util.Set;
 public interface PolicyService {
     /**
      * Traffic match priority.
+     * @deprecated in version 3.0.2
      */
+    @Deprecated
     int TRAFFIC_MATCH_PRIORITY = 60000;
 
     /**

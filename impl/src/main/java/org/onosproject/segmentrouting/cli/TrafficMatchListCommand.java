@@ -31,7 +31,7 @@ import org.onosproject.segmentrouting.policy.api.TrafficMatchData;
 public class TrafficMatchListCommand extends AbstractShellCommand {
 
     private static final String FORMAT_MAPPING_TRAFFIC_MATCH =
-            "  id=%s, state=%s, policyId=%s";
+            "  id=%s, state=%s, policyId=%s, priority=%d";
     private static final String FORMAT_MAPPING_OPERATION =
             "    op=%s";
 
@@ -43,7 +43,8 @@ public class TrafficMatchListCommand extends AbstractShellCommand {
 
     private void printTrafficMatch(TrafficMatchData trafficMatchData) {
         print(FORMAT_MAPPING_TRAFFIC_MATCH, trafficMatchData.trafficMatch().trafficMatchId(),
-                trafficMatchData.trafficMatchState(), trafficMatchData.trafficMatch().policyId());
+                trafficMatchData.trafficMatchState(), trafficMatchData.trafficMatch().policyId(),
+                trafficMatchData.trafficMatch().trafficMatchPriority().priority());
         trafficMatchData.operations().forEach(operation -> print(FORMAT_MAPPING_OPERATION, operation));
     }
 }

@@ -3,6 +3,7 @@
   "title": "traffic-match-creation",
   "required": [
     "policy_id",
+    "priority",
     "selector"
   ],
   "properties": {
@@ -10,6 +11,11 @@
       "type": "string",
       "example": "DROP",
       "description": "ID of associated policy"
+    },
+    "priority": {
+      "type": "int",
+      "example": "60000",
+      "description": "Priority of the TrafficMatch"
     },
     "selector": {
       "type": "object",

@@ -30,6 +30,7 @@ import org.onosproject.net.flow.DefaultTrafficSelector;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.TrafficMatch;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchPriority;
 
 import java.io.InputStream;
 
@@ -54,8 +55,8 @@ public class TrafficMatchCodecTest extends TestCase {
                 .matchTcpDst(TpPort.tpPort(81))
                 .build();
         policyId = PolicyId.of("DROP");
-
-        trafficMatch = new TrafficMatch(trafficSelector, policyId);
+        TrafficMatchPriority trafficMatchPriority = new TrafficMatchPriority(60000);
+        trafficMatch = new TrafficMatch(trafficSelector, policyId, trafficMatchPriority);
     }
 
     @Test

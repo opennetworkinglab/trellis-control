@@ -19,6 +19,7 @@ import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.segmentrouting.policy.api.PolicyId;
 import org.onosproject.segmentrouting.policy.api.TrafficMatch;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchId;
+import org.onosproject.segmentrouting.policy.api.TrafficMatchPriority;
 import org.onosproject.segmentrouting.policy.api.TrafficMatchState;
 
 import java.util.Objects;
@@ -95,6 +96,15 @@ public final class TrafficMatchRequest {
      */
     public TrafficMatch trafficMatch() {
         return trafficMatch;
+    }
+
+    /**
+     * Returns the priority.
+     *
+     * @return the priority
+     */
+    public TrafficMatchPriority priority() {
+        return trafficMatch.trafficMatchPriority();
     }
 
     @Override
