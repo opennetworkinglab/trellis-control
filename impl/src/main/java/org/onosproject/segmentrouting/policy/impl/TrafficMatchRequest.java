@@ -103,7 +103,7 @@ public final class TrafficMatchRequest {
      *
      * @return the priority
      */
-    public TrafficMatchPriority priority() {
+    public TrafficMatchPriority trafficMatchPriority() {
         return trafficMatch.trafficMatchPriority();
     }
 

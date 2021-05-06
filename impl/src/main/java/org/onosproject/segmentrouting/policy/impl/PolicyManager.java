@@ -573,13 +573,22 @@ public class PolicyManager implements PolicyService {
                     trafficMatch.trafficMatchId(), trafficMatch.policyId());
         }
         TrafficMatchKey trafficMatchKey = new TrafficMatchKey(deviceId, trafficMatch.trafficMatchId());
-        Operation trafficOperation = Versioned.valueOrNull(operations.get(trafficMatchKey.toString()));
-        if (trafficOperation != null && trafficOperation.isInstall()) {
-            if (log.isDebugEnabled()) {
-                log.debug("There is already an install operation for traffic match {} associated to policy {} " +
-                        "for device {}", trafficMatch.trafficMatchId(), trafficMatch.policyId(), deviceId);
+        Operation oldTrafficOperation = Versioned.valueOrNull(operations.get(trafficMatchKey.toString()));
+        if (oldTrafficOperation != null && oldTrafficOperation.isInstall()) {
+            if (trafficMatch.equals(oldTrafficOperation.trafficMatch().orElse(null))) {
+                if (log.isDebugEnabled()) {
+                    log.debug("There is already an install operation for traffic match {} associated to policy {} " +
+                            "for device {}",
+                            trafficMatch.trafficMatchId(), trafficMatch.policyId(), deviceId);
+                }
+                return;
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("Starts updating traffic match {} associated to policy {} " +
+                            "for device {}",
+                            trafficMatch.trafficMatchId(), trafficMatch.policyId(), deviceId);
+                }
             }
-            return;
         }
         // For the DROP policy we need to set an ACL drop in the fwd objective. The other
         // policies require to retrieve the next Id and sets the next step.
@@ -594,11 +603,11 @@ public class PolicyManager implements PolicyService {
             return;
         }
         // Updates the store and then send the versatile fwd objective to the pipeliner
-        trafficOperation = Operation.builder()
+        Operation newTrafficOperation = Operation.builder()
                 .isInstall(true)
                 .trafficMatch(trafficMatch)
                 .build();
-        operations.put(trafficMatchKey.toString(), trafficOperation);
+        operations.put(trafficMatchKey.toString(), newTrafficOperation);
         Policy policy = policyOperation.policy().get();
         ForwardingObjective.Builder builder = trafficMatchFwdObjective(trafficMatch, policy.policyType());
         if (policy.policyType() == PolicyType.DROP) {
@@ -613,28 +622,64 @@ public class PolicyManager implements PolicyService {
             builder.nextStep(policyOperation.objectiveOperation().id());
         }
         // Once, the fwd objective has completed its execution, we update the policiesOps map
-        CompletableFuture<Objective> future = new CompletableFuture<>();
+        CompletableFuture<Objective> addNewFuture = new CompletableFuture<>();
+        CompletableFuture<Objective> removeOldFuture = new CompletableFuture<>();
         if (log.isDebugEnabled()) {
             log.debug("Installing forwarding objective for dev: {}", deviceId);
         }
-        ObjectiveContext context = new DefaultObjectiveContext(
+        ObjectiveContext addNewContext = new DefaultObjectiveContext(
                 (objective) -> {
                     if (log.isDebugEnabled()) {
                         log.debug("Forwarding objective for policy {} installed", trafficMatch.policyId());
                     }
-                    future.complete(objective);
+                    addNewFuture.complete(objective);
                 },
                 (objective, error) -> {
                     log.warn("Failed to install forwarding objective for policy {}: {}",
                             trafficMatch.policyId(), error);
-                    future.complete(null);
+                            addNewFuture.complete(null);
                 });
+        ObjectiveContext removeOldContext = new DefaultObjectiveContext(
+            (objective) -> {
+                if (log.isDebugEnabled()) {
+                    log.debug("Old forwarding objective for policy {} removed, update finished",
+                            trafficMatch.policyId());
+                }
+                removeOldFuture.complete(objective);
+            },
+            (objective, error) -> {
+                log.warn("Failed to remove old forwarding objective for policy {}: {}",
+                        trafficMatch.policyId(), error);
+                        removeOldFuture.complete(null);
+            });
         // Context is not serializable
         ForwardingObjective serializableObjective = builder.add();
-        flowObjectiveService.forward(deviceId, builder.add(context));
-        future.whenComplete((objective, ex) -> {
+        flowObjectiveService.forward(deviceId, builder.add(addNewContext));
+        addNewFuture.whenComplete((objective, ex) -> {
             if (ex != null) {
                 log.error("Exception installing forwarding objective", ex);
+            } else if (objective != null) {
+                // Remove existing flow with previous priority after new flow is installed
+                if (oldTrafficOperation != null && oldTrafficOperation.objectiveOperation() != null
+                        && oldTrafficOperation.isInstall()
+                        && oldTrafficOperation.objectiveOperation().priority() != serializableObjective.priority()) {
+                    ForwardingObjective oldFwdObj = (ForwardingObjective) oldTrafficOperation.objectiveOperation();
+                    ForwardingObjective.Builder oldBuilder = DefaultForwardingObjective.builder(oldFwdObj);
+                    flowObjectiveService.forward(deviceId, oldBuilder.remove(removeOldContext));
+                } else {
+                    operations.computeIfPresent(trafficMatchKey.toString(), (k, v) -> {
+                        if (!v.isDone() && v.isInstall())  {
+                            v.isDone(true);
+                            v.objectiveOperation(serializableObjective);
+                        }
+                        return v;
+                    });
+                }
+            }
+        });
+        removeOldFuture.whenComplete((objective, ex) -> {
+            if (ex != null) {
+                log.error("Exception removing old forwarding objective", ex);
             } else if (objective != null) {
                 operations.computeIfPresent(trafficMatchKey.toString(), (k, v) -> {
                     if (!v.isDone() && v.isInstall())  {
