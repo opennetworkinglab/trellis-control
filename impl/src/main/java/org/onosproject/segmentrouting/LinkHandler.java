@@ -203,8 +203,15 @@ public class LinkHandler {
             return;
         }
         // when removing links, update seen links first, before doing route-path
-        // changes
-        updateSeenLink(link, false);
+        // changes. Link should be already there because was up before. If not,
+        // we should not update the store. This could be a LINK DOWN happening
+        // after a DEVICE DOWN event.
+        if (isSeenLink(link)) {
+            updateSeenLink(link, false);
+        } else {
+            // Exiting here may not be needed since other checks later should fail
+            log.warn("received a link down for the link {} which is not in the store", link);
+        }
         // handle edge-ports for dual-homed hosts
         if (srManager.mastershipService.isLocalMaster(link.src().deviceId())) {
             updateHostPorts(link, false);
