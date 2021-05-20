@@ -17,6 +17,7 @@ package org.onosproject.segmentrouting;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
@@ -539,18 +540,30 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         linkHandler.init();
         l2TunnelHandler.init();
 
-        synchronized (networkConfigCompletionLock) {
-            networkConfigCompletion.whenComplete((value, ex) -> {
-                //setting to null for easier fall through
-                networkConfigCompletion = null;
-                //process all queued events
-                queuedEvents.forEach(event -> {
-                    mainEventExecutor.execute(new InternalEventHandler(event));
-                });
-            });
-        }
+        drainEvents();
 
         log.info("Started");
+    }
+
+    // Drain buffered events
+    private void drainEvents() {
+        synchronized (networkConfigCompletionLock) {
+            final List<Event> processedEvents = Lists.newArrayList();
+            if (networkConfigCompletion != null) {
+                networkConfigCompletion.whenComplete((value, ex) -> {
+                    //setting to null for easier fall through
+                    networkConfigCompletion = null;
+                    //process all queued events
+                    queuedEvents.forEach(event -> {
+                        mainEventExecutor.execute(new InternalEventHandler(event));
+                        processedEvents.add(event);
+                    });
+                    // Removes all
+                    queuedEvents.removeAll(processedEvents);
+                    processedEvents.clear();
+                });
+            }
+        }
     }
 
     KryoNamespace.Builder createSerializer() {
@@ -886,7 +899,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
     @Override
     public void rerouteNetwork() {
-        cfgListener.configureNetwork();
+        cfgListener.configureNetworkAndDrainEvents();
     }
 
     @Override
@@ -1517,13 +1530,13 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                     if (configClass.equals(SegmentRoutingAppConfig.class)) {
                         appCfgHandler.processAppConfigAdded(netcfgEvent);
                         log.info("App config event .. configuring network");
-                        cfgListener.configureNetwork();
+                        cfgListener.configureNetworkAndDrainEvents();
                     } else if (configClass.equals(SegmentRoutingDeviceConfig.class)) {
                         log.info("Segment Routing Device Config added for {}", event.subject());
-                        cfgListener.configureNetwork();
+                        cfgListener.configureNetworkAndDrainEvents();
                     } else if (configClass.equals(InterfaceConfig.class)) {
                         log.info("Interface Config added for {}", event.subject());
-                        cfgListener.configureNetwork();
+                        cfgListener.configureNetworkAndDrainEvents();
                     } else {
                         log.error("Unhandled config class: {}", configClass);
                     }
@@ -1533,7 +1546,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                     if (configClass.equals(SegmentRoutingAppConfig.class)) {
                         appCfgHandler.processAppConfigUpdated(netcfgEvent);
                         log.info("App config event .. configuring network");
-                        cfgListener.configureNetwork();
+                        cfgListener.configureNetworkAndDrainEvents();
                     } else if (configClass.equals(SegmentRoutingDeviceConfig.class)) {
                         log.info("Segment Routing Device Config updated for {}", event.subject());
                         createOrUpdateDeviceConfiguration();
@@ -1551,7 +1564,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                     if (configClass.equals(SegmentRoutingAppConfig.class)) {
                         appCfgHandler.processAppConfigRemoved(netcfgEvent);
                         log.info("App config event .. configuring network");
-                        cfgListener.configureNetwork();
+                        cfgListener.configureNetworkAndDrainEvents();
                     } else if (configClass.equals(SegmentRoutingDeviceConfig.class)) {
                         // TODO Handle sr device config removal
                         log.info("SegmentRoutingDeviceConfig removal is not handled in current implementation");
@@ -1856,6 +1869,15 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
             mcastHandler.init();
 
+        }
+
+        /**
+         * Reads network config, initializes related data structure accordingly
+         * and drain buffered events if needed.
+         */
+        void configureNetworkAndDrainEvents() {
+            configureNetwork();
+            drainEvents();
         }
 
         @Override
