@@ -426,7 +426,10 @@ public class PolicyManager implements PolicyService {
             // DROP policies do not need the next objective installation phase
             // we can update directly the map and signal the ops as done
             operation.isDone(true);
-            operations.put(policyKey.toString(), operation.build());
+            Operation preOp = Versioned.valueOrNull(operations.put(policyKey.toString(), operation.build()));
+            if (preOp != null && preOp.equals(operation.build())) {
+                updatePolicy(policy.policyId(), true);
+            }
         } else if (policy.policyType() == PolicyType.REDIRECT) {
             // REDIRECT Uses next objective context to update the ops as done when
             // it returns successfully. In the other cases leaves the ops as undone
