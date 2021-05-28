@@ -154,9 +154,11 @@ public class LinkHandler {
         for (Link ulink : ulinks) {
             log.info("-- Starting optimized route-path processing for component "
                     + "unidirectional link {} --> {} UP", ulink.src(), ulink.dst());
+            // Performs the seenBefore optimization iff we have seen before both links in that case
+            // we have programmed the group (unless there were major issues in the system)
             srManager.defaultRoutingHandler
                     .populateRoutingRulesForLinkStatusChange(null, ulink, null,
-                                                             seenBefore.contains(ulink));
+                            (seenBefore.contains(ulink) && seenBefore.contains(getReverseLink(ulink))));
 
             if (srManager.mastershipService.isLocalMaster(ulink.src().deviceId())) {
                 // handle edge-ports for dual-homed hosts
