@@ -1214,6 +1214,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     }
 
     @Override
+    public List<DeviceId> getInfraDeviceIds() {
+        return deviceConfiguration.getInfraDeviceIds();
+    }
+
+    @Override
     public MacAddress getDeviceMacAddress(DeviceId deviceId) throws DeviceConfigNotFoundException {
         return deviceConfiguration.getDeviceMac(deviceId);
     }
@@ -1583,6 +1588,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                     defaultRoutingHandler.invalidateShouldProgramCache(deviceId);
                     pairDeviceId.ifPresent(defaultRoutingHandler::invalidateShouldProgramCache);
                     defaultRoutingHandler.checkFullRerouteForMasterChange(deviceId, me);
+
                 } else {
                     log.warn("Unhandled event type: {}", event.type());
                 }

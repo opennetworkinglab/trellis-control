@@ -447,6 +447,13 @@ public interface SegmentRoutingService {
     List<DeviceId> getEdgeDeviceIds();
 
     /**
+     * Returns a list of infra devices.
+     *
+     * @return list of the infra device ids
+     */
+    List<DeviceId> getInfraDeviceIds();
+
+    /**
      * Returns the configured mac address of the device.
      *
      * @param deviceId the device id

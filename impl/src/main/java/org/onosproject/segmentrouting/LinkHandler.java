@@ -347,6 +347,12 @@ public class LinkHandler {
      * @param added true if link was added, false if link was removed
      */
     private void updateHostPorts(Link link, boolean added) {
+        // Topology has only a single pair of leaves
+        if (srManager.getInfraDeviceIds().isEmpty()) {
+            log.debug("No spine configured. Not updating edge port for {} {}", link, added ? "add" : "remove");
+            return;
+        }
+
         DeviceConfiguration devConfig = srManager.deviceConfiguration;
         if (added) {
             try {
@@ -674,12 +680,19 @@ public class LinkHandler {
      * @param loc the host location
      */
     void checkUplinksForHost(HostLocation loc) {
+        // Topology has only a single pair of leaves
+        if (srManager.getInfraDeviceIds().isEmpty()) {
+            log.debug("No spine configured. Not disabling access port for {}", loc);
+            return;
+        }
+
         // If the device does not have a pair device - return
         if (getPairDeviceIdOrNull(loc.deviceId()) == null) {
             log.info("Device {} does not have pair device " +
                              "not disabling access port", loc.deviceId());
             return;
         }
+
         // Verify link validity
         try {
             for (Link l : srManager.linkService.getDeviceLinks(loc.deviceId())) {

@@ -426,6 +426,14 @@ public class DeviceConfiguration implements DeviceProperties {
     }
 
     @Override
+    public List<DeviceId> getInfraDeviceIds() {
+        return deviceConfigMap.values().stream()
+                .filter(deviceInfo -> !deviceInfo.isEdge)
+                .map(deviceInfo -> deviceInfo.deviceId)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<Integer> getAllDeviceSegmentIds() {
         return allSegmentIds;
     }

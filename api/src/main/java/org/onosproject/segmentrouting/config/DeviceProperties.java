@@ -108,6 +108,13 @@ public interface DeviceProperties {
     List<DeviceId> getEdgeDeviceIds();
 
     /**
+     * Returns a list of infra devices.
+     *
+     * @return list of the infra device ids
+     */
+    List<DeviceId> getInfraDeviceIds();
+
+    /**
      * Returns all segment IDs to be considered in building auto
      *
      * created groups.
