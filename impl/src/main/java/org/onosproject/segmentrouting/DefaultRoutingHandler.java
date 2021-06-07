@@ -448,7 +448,9 @@ public class DefaultRoutingHandler {
                         continue;
                     }
                     Optional<DeviceId> pairDev = srManager.getPairDeviceId(dstSw);
-                    if (dstSw.equals(targetSw.id()) || !isEdge ||
+//                    if (dstSw.equals(targetSw.id()) || !isEdge ||
+//                            (cpts.size() == 2 && pairDev.isPresent() && targetSw.id().equals(pairDev.get()))) {
+                    if (dstSw.equals(targetSw.id()) ||
                             (cpts.size() == 2 && pairDev.isPresent() && targetSw.id().equals(pairDev.get()))) {
                         continue;
                     }
@@ -1050,7 +1052,7 @@ public class DefaultRoutingHandler {
             return false;
         }
 
-        if (targetIsEdge && dest1IsEdge) {
+        //if (targetIsEdge && dest1IsEdge) {
             List<Set<IpPrefix>> batchedSubnets;
             if (subnets != null && !subnets.isEmpty()) {
                 batchedSubnets = Lists.<Set<IpPrefix>>newArrayList(Sets.newHashSet(subnets));
@@ -1079,63 +1081,63 @@ public class DefaultRoutingHandler {
                     return false;
                 }
             }
-        }
+        //}
 
-        if (!targetIsEdge && dest1IsEdge) {
-            // MPLS rules in all non-edge target devices. These rules are for
-            // individual destinations, even if the dsts are part of edge-pairs.
-            log.debug(". populateEcmpRoutingRulePartial in device{} towards {} for "
-                    + "all MPLS rules", targetSw, destSw1);
-            result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1), dest1RouterIpv4);
-            if (!result) {
-                return false;
-            }
-            if (dest1RouterIpv6 != null) {
-                int v4sid = 0, v6sid = 0;
-                try {
-                    v4sid = config.getIPv4SegmentId(destSw1);
-                    v6sid = config.getIPv6SegmentId(destSw1);
-                } catch (DeviceConfigNotFoundException e) {
-                    log.warn(e.getMessage());
-                }
-                if (v4sid != v6sid) {
-                    result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1),
-                                                            dest1RouterIpv6);
-                    if (!result) {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        if (!targetIsEdge && !dest1IsEdge) {
-            // MPLS rules for inter-connected spines
-            // can be merged with above if, left it here for clarity
-            log.debug(". populateEcmpRoutingRulePartial in device{} towards {} for "
-                              + "all MPLS rules", targetSw, destSw1);
-
-            result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1), dest1RouterIpv4);
-            if (!result) {
-                return false;
-            }
-
-            if (dest1RouterIpv6 != null) {
-                int v4sid = 0, v6sid = 0;
-                try {
-                    v4sid = config.getIPv4SegmentId(destSw1);
-                    v6sid = config.getIPv6SegmentId(destSw1);
-                } catch (DeviceConfigNotFoundException e) {
-                    log.warn(e.getMessage());
-                }
-                if (v4sid != v6sid) {
-                    result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1),
-                                                            dest1RouterIpv6);
-                    if (!result) {
-                        return false;
-                    }
-                }
-           }
-        }
+//        if (!targetIsEdge && dest1IsEdge) {
+//            // MPLS rules in all non-edge target devices. These rules are for
+//            // individual destinations, even if the dsts are part of edge-pairs.
+//            log.debug(". populateEcmpRoutingRulePartial in device{} towards {} for "
+//                    + "all MPLS rules", targetSw, destSw1);
+//            result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1), dest1RouterIpv4);
+//            if (!result) {
+//                return false;
+//            }
+//            if (dest1RouterIpv6 != null) {
+//                int v4sid = 0, v6sid = 0;
+//                try {
+//                    v4sid = config.getIPv4SegmentId(destSw1);
+//                    v6sid = config.getIPv6SegmentId(destSw1);
+//                } catch (DeviceConfigNotFoundException e) {
+//                    log.warn(e.getMessage());
+//                }
+//                if (v4sid != v6sid) {
+//                    result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1),
+//                                                            dest1RouterIpv6);
+//                    if (!result) {
+//                        return false;
+//                    }
+//                }
+//            }
+//        }
+//
+//        if (!targetIsEdge && !dest1IsEdge) {
+//            // MPLS rules for inter-connected spines
+//            // can be merged with above if, left it here for clarity
+//            log.debug(". populateEcmpRoutingRulePartial in device{} towards {} for "
+//                              + "all MPLS rules", targetSw, destSw1);
+//
+//            result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1), dest1RouterIpv4);
+//            if (!result) {
+//                return false;
+//            }
+//
+//            if (dest1RouterIpv6 != null) {
+//                int v4sid = 0, v6sid = 0;
+//                try {
+//                    v4sid = config.getIPv4SegmentId(destSw1);
+//                    v6sid = config.getIPv6SegmentId(destSw1);
+//                } catch (DeviceConfigNotFoundException e) {
+//                    log.warn(e.getMessage());
+//                }
+//                if (v4sid != v6sid) {
+//                    result = rulePopulator.populateMplsRule(targetSw, destSw1, nextHops.get(destSw1),
+//                                                            dest1RouterIpv6);
+//                    if (!result) {
+//                        return false;
+//                    }
+//                }
+//           }
+//        }
 
         // To save on ECMP groups
         // avoid MPLS rules in non-edge-devices to non-edge-devices
