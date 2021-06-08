@@ -416,6 +416,9 @@ public class PolicyManager implements PolicyService {
             if (log.isDebugEnabled()) {
                 log.debug("There is already an install operation for policy {}", policy.policyId());
             }
+            // If we add or submit a policy multiple times
+            // We skip the installation update the policy state directly
+            updatePolicy(policy.policyId(), true);
             return;
         }
         operation = Operation.builder()
@@ -426,10 +429,7 @@ public class PolicyManager implements PolicyService {
             // DROP policies do not need the next objective installation phase
             // we can update directly the map and signal the ops as done
             operation.isDone(true);
-            Operation preOp = Versioned.valueOrNull(operations.put(policyKey.toString(), operation.build()));
-            if (preOp != null && preOp.equals(operation.build())) {
-                updatePolicy(policy.policyId(), true);
-            }
+            operations.put(policyKey.toString(), operation.build());
         } else if (policy.policyType() == PolicyType.REDIRECT) {
             // REDIRECT Uses next objective context to update the ops as done when
             // it returns successfully. In the other cases leaves the ops as undone
@@ -617,6 +617,9 @@ public class PolicyManager implements PolicyService {
                             "for device {}",
                             trafficMatch.trafficMatchId(), trafficMatch.policyId(), deviceId);
                 }
+                // If we add or submit a trafficMatch multiple times
+                // We skip the installation and update the state directly
+                updateTrafficMatch(trafficMatch, true);
                 return;
             } else {
                 if (log.isDebugEnabled()) {
@@ -695,10 +698,15 @@ public class PolicyManager implements PolicyService {
             if (ex != null) {
                 log.error("Exception installing forwarding objective", ex);
             } else if (objective != null) {
-                // Remove existing flow with previous priority after new flow is installed
+                // Remove existing flow after new flow is installed
+                // base on priority, selector and metadata change
                 if (oldTrafficOperation != null && oldTrafficOperation.objectiveOperation() != null
                         && oldTrafficOperation.isInstall()
-                        && oldTrafficOperation.objectiveOperation().priority() != serializableObjective.priority()) {
+                        && (oldTrafficOperation.objectiveOperation().priority() != serializableObjective.priority()
+                            || !((ForwardingObjective) oldTrafficOperation.objectiveOperation()).selector()
+                                .equals(serializableObjective.selector())
+                            || !((ForwardingObjective) oldTrafficOperation.objectiveOperation()).meta()
+                                .equals(serializableObjective.meta()))) {
                     ForwardingObjective oldFwdObj = (ForwardingObjective) oldTrafficOperation.objectiveOperation();
                     ForwardingObjective.Builder oldBuilder = DefaultForwardingObjective.builder(oldFwdObj);
                     flowObjectiveService.forward(deviceId, oldBuilder.remove(removeOldContext));
