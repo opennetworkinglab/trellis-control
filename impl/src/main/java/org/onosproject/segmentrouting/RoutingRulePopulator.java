@@ -1555,6 +1555,8 @@ public class RoutingRulePopulator {
         TrafficTreatment.Builder tBuilder = DefaultTrafficTreatment.builder();
         if (punt) {
             tBuilder.punt();
+        } else {
+            tBuilder.wipeDeferred();
         }
         return fwdObjBuilder(sBuilder.build(), tBuilder.build(), priority);
     }
@@ -1575,6 +1577,8 @@ public class RoutingRulePopulator {
                     TrafficTreatment.Builder tBuilder = DefaultTrafficTreatment.builder();
                     if (punt) {
                         tBuilder.punt();
+                    } else {
+                        tBuilder.wipeDeferred();
                     }
 
                     result.add(fwdObjBuilder(sBuilder.build(), tBuilder.build(), priority));
