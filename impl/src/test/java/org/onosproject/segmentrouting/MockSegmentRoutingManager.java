@@ -16,12 +16,14 @@
 
 package org.onosproject.segmentrouting;
 
+import org.onlab.packet.MacAddress;
 import org.onosproject.core.DefaultApplicationId;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.flow.TrafficSelector;
 import org.onosproject.net.flow.TrafficTreatment;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -30,11 +32,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MockSegmentRoutingManager extends SegmentRoutingManager {
     private Map<Integer, TrafficTreatment> nextTable;
+    private Map<DeviceId, MacAddress> routerMacs;
+    private List<DeviceId> infraDeviceIds;
     private AtomicInteger atomicNextId = new AtomicInteger();
 
-    MockSegmentRoutingManager(Map<Integer, TrafficTreatment> nextTable) {
+    MockSegmentRoutingManager(Map<Integer, TrafficTreatment> nextTable,
+                              Map<DeviceId, MacAddress> routerMacs) {
         appId = new DefaultApplicationId(1, SegmentRoutingManager.APP_NAME);
         this.nextTable = nextTable;
+        this.routerMacs = routerMacs;
+        this.infraDeviceIds = List.of(DeviceId.deviceId("device:1"));
     }
 
     @Override
@@ -45,5 +52,19 @@ public class MockSegmentRoutingManager extends SegmentRoutingManager {
         int nextId = atomicNextId.incrementAndGet();
         nextTable.put(nextId, treatment);
         return nextId;
+    }
+
+    @Override
+    public List<DeviceId> getInfraDeviceIds() {
+        return List.copyOf(infraDeviceIds);
+    }
+
+    public void setInfraDeviceIds(List<DeviceId> infraDeviceIds) {
+        this.infraDeviceIds = infraDeviceIds;
+    }
+
+    @Override
+    public MacAddress getDeviceMacAddress(DeviceId deviceId) {
+        return routerMacs.get(deviceId);
     }
 }

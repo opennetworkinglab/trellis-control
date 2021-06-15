@@ -231,7 +231,7 @@ public class HostHandlerTest {
         mockNetworkConfigRegistry.applyConfig(dev4Config);
 
         // Initialize Segment Routing Manager
-        SegmentRoutingManager srManager = new MockSegmentRoutingManager(NEXT_TABLE);
+        SegmentRoutingManager srManager = new MockSegmentRoutingManager(NEXT_TABLE, Maps.newHashMap());
         srManager.storageService = createMock(StorageService.class);
         expect(srManager.storageService.consistentMapBuilder()).andReturn(new TestConsistentMap.Builder<>()).anyTimes();
         expect(srManager.storageService.consistentMultimapBuilder()).andReturn(

@@ -23,13 +23,13 @@ import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.Host;
-import org.onosproject.net.HostLocation;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.host.HostEvent;
 import org.onosproject.routeservice.ResolvedRoute;
 import org.onosproject.routeservice.RouteEvent;
 import org.onosproject.net.DeviceId;
 import org.onosproject.routeservice.RouteInfo;
+import org.onosproject.segmentrouting.config.DeviceConfigNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,9 +88,9 @@ public class RouteHandler {
             return;
         }
 
-        ResolvedRoute rr = routes.stream().findFirst().orElse(null);
-        if (rr == null) {
+        if (routes.isEmpty()) {
             log.warn("No resolved route found. Abort processRouteAddedInternal");
+            return;
         }
 
         Set<ConnectPoint> allLocations = Sets.newHashSet();
@@ -101,7 +101,6 @@ public class RouteHandler {
         });
         log.debug("RouteAdded. populateSubnet {}, {}", allLocations, allPrefixes);
         srManager.defaultRoutingHandler.populateSubnet(allLocations, allPrefixes);
-
 
         routes.forEach(route -> {
             IpPrefix prefix = route.prefix();
@@ -115,6 +114,8 @@ public class RouteHandler {
                 log.debug("RouteAdded populateRoute {}, {}, {}, {}", location, prefix, nextHopMac, nextHopVlan);
                 srManager.defaultRoutingHandler.populateRoute(location.deviceId(), prefix,
                         nextHopMac, nextHopVlan, location.port(), false);
+
+                processSingleLeafPairIfNeeded(locations, location, prefix, nextHopVlan);
             });
         });
     }
@@ -189,6 +190,8 @@ public class RouteHandler {
                 log.debug("RouteUpdated. populateRoute {}, {}, {}, {}", location, prefix, nextHopMac, nextHopVlan);
                 srManager.defaultRoutingHandler.populateRoute(location.deviceId(), prefix,
                         nextHopMac, nextHopVlan, location.port(), false);
+
+                processSingleLeafPairIfNeeded(locations, location, prefix, nextHopVlan);
             });
         });
     }
@@ -223,19 +226,7 @@ public class RouteHandler {
                 srManager.deviceConfiguration.removeSubnet(location, prefix);
                 // We don't need to call revokeRoute again since revokeSubnet will remove the prefix
                 // from all devices, including the ones that next hop attaches to.
-
-                // Also remove redirection flows on the pair device if exists.
-                Optional<DeviceId> pairDeviceId = srManager.getPairDeviceId(location.deviceId());
-                Optional<PortNumber> pairLocalPort = srManager.getPairLocalPort(location.deviceId());
-                if (pairDeviceId.isPresent() && pairLocalPort.isPresent()) {
-                    // NOTE: Since the pairLocalPort is trunk port, use assigned vlan of original port
-                    //       when the host is untagged
-                    VlanId vlanId = Optional.ofNullable(srManager.getInternalVlanId(location)).orElse(nextHopVlan);
-
-                    log.debug("RouteRemoved. revokeRoute {}, {}, {}, {}", location, prefix, nextHopMac, nextHopVlan);
-                    srManager.defaultRoutingHandler.revokeRoute(pairDeviceId.get(), prefix,
-                            nextHopMac, vlanId, pairLocalPort.get(), false);
-                }
+                // revokeSubnet will also remove flow on the pair device (if exist) pointing to current location.
             });
         });
     }
@@ -245,19 +236,21 @@ public class RouteHandler {
         MacAddress hostMac = event.subject().mac();
         VlanId hostVlanId = event.subject().vlan();
 
-        Set<HostLocation> prevLocations = event.prevSubject().locations();
-        Set<HostLocation> newLocations = event.subject().locations();
-        Set<ConnectPoint> connectPoints = newLocations.stream()
-                .map(l -> (ConnectPoint) l).collect(Collectors.toSet());
+        Set<ConnectPoint> prevLocations = event.prevSubject().locations()
+                .stream().map(h -> (ConnectPoint) h)
+                .collect(Collectors.toSet());
+        Set<ConnectPoint> newLocations = event.subject().locations()
+                .stream().map(h -> (ConnectPoint) h)
+                .collect(Collectors.toSet());
         List<Set<IpPrefix>> batchedSubnets =
                 srManager.deviceConfiguration.getBatchedSubnets(event.subject().id());
-        Set<DeviceId> newDeviceIds = newLocations.stream().map(HostLocation::deviceId)
+        Set<DeviceId> newDeviceIds = newLocations.stream().map(ConnectPoint::deviceId)
                 .collect(Collectors.toSet());
 
         // Set of deviceIDs of the previous locations where the host was connected
         // Used to determine if host moved to different connect points
         // on same device or moved to a different device altogether
-        Set<DeviceId> oldDeviceIds = prevLocations.stream().map(HostLocation::deviceId)
+        Set<DeviceId> oldDeviceIds = prevLocations.stream().map(ConnectPoint::deviceId)
                 .collect(Collectors.toSet());
 
         // L3 Ucast bucket needs to be updated only once per host
@@ -288,7 +281,7 @@ public class RouteHandler {
 
         batchedSubnets.forEach(subnets -> {
             log.debug("HostMoved. populateSubnet {}, {}", newLocations, subnets);
-            srManager.defaultRoutingHandler.populateSubnet(connectPoints, subnets);
+            srManager.defaultRoutingHandler.populateSubnet(newLocations, subnets);
 
             subnets.forEach(prefix -> {
                 // For each old location
@@ -304,7 +297,10 @@ public class RouteHandler {
                     srManager.deviceConfiguration.removeSubnet(prevLocation, prefix);
 
                     // Do not remove flow from a device if the route is still reachable via its pair device.
-                    // populateSubnet will update the flow to point to its pair device via spine.
+                    // If spine exists,
+                    //     populateSubnet above will update the flow to point to its pair device via spine.
+                    // If spine does not exist,
+                    //     processSingleLeafPair below will update the flow to point to its pair device via pair port.
                     DeviceId pairDeviceId = srManager.getPairDeviceId(prevLocation.deviceId()).orElse(null);
                     if (newLocations.stream().anyMatch(n -> n.deviceId().equals(pairDeviceId))) {
                         return;
@@ -326,6 +322,10 @@ public class RouteHandler {
                        srManager.defaultRoutingHandler.populateRoute(newLocation.deviceId(), prefix,
                               hostMac, hostVlanId, newLocation.port(), false);
                     }
+                });
+
+                newLocations.forEach(location -> {
+                    processSingleLeafPairIfNeeded(newLocations, location, prefix, hostVlanId);
                 });
             });
         });
@@ -369,5 +369,46 @@ public class RouteHandler {
     private boolean isReady() {
         return Objects.nonNull(srManager.deviceConfiguration) &&
                 Objects.nonNull(srManager.defaultRoutingHandler);
+    }
+
+    protected boolean processSingleLeafPairIfNeeded(Set<ConnectPoint> locations, ConnectPoint location, IpPrefix prefix,
+                                                    VlanId nextHopVlan) {
+        // Special handling for single leaf pair
+        if (!srManager.getInfraDeviceIds().isEmpty()) {
+            log.debug("Spine found. Skip single leaf pair handling");
+            return false;
+        }
+        Optional<DeviceId> pairDeviceId = srManager.getPairDeviceId(location.deviceId());
+        if (pairDeviceId.isEmpty()) {
+            log.debug("Pair device of {} not found", location.deviceId());
+            return false;
+        }
+        if (locations.stream().anyMatch(l -> l.deviceId().equals(pairDeviceId.get()))) {
+            log.debug("Pair device has a next hop available. Leave it as is.");
+            return false;
+        }
+        Optional<PortNumber> pairRemotePort = srManager.getPairLocalPort(pairDeviceId.get());
+        if (pairRemotePort.isEmpty()) {
+            log.debug("Pair remote port of {} not found", pairDeviceId.get());
+            return false;
+        }
+        // Use routerMac of the pair device as the next hop
+        MacAddress effectiveMac;
+        try {
+            effectiveMac = srManager.getDeviceMacAddress(location.deviceId());
+        } catch (DeviceConfigNotFoundException e) {
+            log.warn("Abort populateRoute on pair device {}. routerMac not found", pairDeviceId);
+            return false;
+        }
+        // Since the pairLocalPort is trunk port, use assigned vlan of original port
+        // when the host is untagged
+        VlanId effectiveVlan = Optional.ofNullable(srManager.getInternalVlanId(location)).orElse(nextHopVlan);
+
+        log.debug("Single leaf pair. populateRoute {}/{}, {}, {}, {}", pairDeviceId, pairRemotePort, prefix,
+                effectiveMac, effectiveVlan);
+        srManager.defaultRoutingHandler.populateRoute(pairDeviceId.get(), prefix,
+                effectiveMac, effectiveVlan, pairRemotePort.get(), false);
+
+        return true;
     }
 }

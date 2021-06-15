@@ -51,6 +51,7 @@ import org.onosproject.store.service.StorageService;
 import org.onosproject.store.service.TestConsistentMap;
 import org.onosproject.store.service.TestConsistentMultimap;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -66,7 +67,7 @@ import static org.easymock.EasyMock.verify;
  * Unit test for {@link RouteHandler}.
  */
 public class RouteHandlerTest {
-    private SegmentRoutingManager srManager;
+    private MockSegmentRoutingManager srManager;
     private RouteHandler routeHandler;
     private HostService hostService;
 
@@ -149,6 +150,14 @@ public class RouteHandlerTest {
             null, null, null, null, null);
     private static final Set<Interface> INTERFACES = Sets.newHashSet(IF_CP1, IF_CP2);
 
+    // Route MAC
+    private static final MacAddress ROUTER_MAC_1 = MacAddress.valueOf("00:AA:00:00:00:01");
+    private static final MacAddress ROUTER_MAC_2 = MacAddress.valueOf("00:AA:00:00:00:01");
+    private static final Map<DeviceId, MacAddress> ROUTER_MACS = Map.of(
+            CP1.deviceId(), ROUTER_MAC_1,
+            CP2.deviceId(), ROUTER_MAC_2
+    );
+
     @Before
     public void setUp() {
         ObjectMapper mapper = new ObjectMapper();
@@ -169,7 +178,7 @@ public class RouteHandlerTest {
         mockNetworkConfigRegistry.applyConfig(dev2Config);
 
         // Initialize Segment Routing Manager
-        srManager = new MockSegmentRoutingManager(NEXT_TABLE);
+        srManager = new MockSegmentRoutingManager(NEXT_TABLE, ROUTER_MACS);
         srManager.storageService = createMock(StorageService.class);
         expect(srManager.storageService.consistentMapBuilder()).andReturn(new TestConsistentMap.Builder<>()).anyTimes();
         expect(srManager.storageService.consistentMultimapBuilder()).andReturn(
@@ -249,6 +258,31 @@ public class RouteHandlerTest {
         assertEquals(1, SUBNET_TABLE.size());
     }
 
+    // Only one of two dual-homed next hops present.
+    // Expect one routing table to be programmed with direct flow.
+    // The other is pointing to pair port
+    @Test
+    public void initDhcpRouteSingleDualHomeNextHopSingleLeafPair() {
+        srManager.setInfraDeviceIds(List.of());
+
+        ROUTE_STORE.put(P1, Sets.newHashSet(DHCP_RR1));
+
+        routeHandler.init(CP1.deviceId());
+
+        assertEquals(2, ROUTING_TABLE.size());
+        MockRoutingTableValue rtv1 = ROUTING_TABLE.get(new MockRoutingTableKey(CP1.deviceId(), P1));
+        assertEquals(M1, rtv1.macAddress);
+        assertEquals(V1, rtv1.vlanId);
+        assertEquals(CP1.port(), rtv1.portNumber);
+
+        MockRoutingTableValue rtv2 = ROUTING_TABLE.get(new MockRoutingTableKey(CP2.deviceId(), P1));
+        assertEquals(ROUTER_MAC_1, rtv2.macAddress);
+        assertEquals(V1, rtv2.vlanId);
+        assertEquals(P9, rtv2.portNumber);
+
+        assertEquals(1, SUBNET_TABLE.size());
+    }
+
     // Both dual-homed next hops present.
     // Expect both routing table to be programmed with direct flow
     @Test
@@ -270,6 +304,29 @@ public class RouteHandlerTest {
 
         assertEquals(2, SUBNET_TABLE.size());
     }
+
+    @Test
+    public void initDhcpRouteBothDualHomeNextHopSingleLeafPair() {
+        srManager.setInfraDeviceIds(List.of());
+
+        ROUTE_STORE.put(P1, Sets.newHashSet(DHCP_RR3));
+
+        routeHandler.init(CP1.deviceId());
+
+        assertEquals(2, ROUTING_TABLE.size());
+        MockRoutingTableValue rtv1 = ROUTING_TABLE.get(new MockRoutingTableKey(CP1.deviceId(), P1));
+        assertEquals(M3, rtv1.macAddress);
+        assertEquals(V3, rtv1.vlanId);
+        assertEquals(CP1.port(), rtv1.portNumber);
+
+        MockRoutingTableValue rtv2 = ROUTING_TABLE.get(new MockRoutingTableKey(CP2.deviceId(), P1));
+        assertEquals(M3, rtv2.macAddress);
+        assertEquals(V3, rtv2.vlanId);
+        assertEquals(CP2.port(), rtv2.portNumber);
+
+        assertEquals(2, SUBNET_TABLE.size());
+    }
+
 
     @Test
     public void processRouteAdded() {
@@ -399,6 +456,37 @@ public class RouteHandlerTest {
     }
 
     @Test
+    public void testOneDualHomedAddedSingleLeafPair() {
+        srManager.setInfraDeviceIds(List.of());
+
+        reset(srManager.deviceConfiguration);
+        srManager.deviceConfiguration.addSubnet(CP1, P1);
+        expectLastCall().once();
+        srManager.deviceConfiguration.addSubnet(CP2, P1);
+        expectLastCall().once();
+        replay(srManager.deviceConfiguration);
+
+        RouteEvent re = new RouteEvent(RouteEvent.Type.ROUTE_ADDED, RR3, Sets.newHashSet(RR3));
+        routeHandler.processRouteAdded(re);
+
+        assertEquals(2, ROUTING_TABLE.size());
+        MockRoutingTableValue rtv1 = ROUTING_TABLE.get(new MockRoutingTableKey(CP1.deviceId(), P1));
+        MockRoutingTableValue rtv2 = ROUTING_TABLE.get(new MockRoutingTableKey(CP2.deviceId(), P1));
+        assertEquals(M3, rtv1.macAddress);
+        assertEquals(M3, rtv2.macAddress);
+        assertEquals(V3, rtv1.vlanId);
+        assertEquals(V3, rtv2.vlanId);
+        assertEquals(CP1.port(), rtv1.portNumber);
+        assertEquals(CP2.port(), rtv2.portNumber);
+
+        assertEquals(2, SUBNET_TABLE.size());
+        assertTrue(SUBNET_TABLE.get(CP1).contains(P1));
+        assertTrue(SUBNET_TABLE.get(CP2).contains(P1));
+
+        verify(srManager.deviceConfiguration);
+    }
+
+    @Test
     public void testOneSingleHomedToTwoSingleHomed() {
         processRouteAdded();
 
@@ -480,6 +568,48 @@ public class RouteHandlerTest {
         assertEquals(V3, rtv1.vlanId);
         assertEquals(CP1.port(), rtv1.portNumber);
 
+        MockRoutingTableValue rtv2 = ROUTING_TABLE.get(new MockRoutingTableKey(CP2.deviceId(), P1));
+        assertEquals(M3, rtv2.macAddress);
+        assertEquals(V3, rtv2.vlanId);
+        assertEquals(CP2.port(), rtv2.portNumber);
+
+        // ECMP route table hasn't changed
+        assertEquals(1, SUBNET_TABLE.size());
+        assertTrue(SUBNET_TABLE.get(CP1).contains(P1));
+
+        verify(srManager.deviceConfiguration);
+    }
+
+    @Test
+    public void testDualHomedSingleLocationFailSingleLeafPair() {
+        srManager.setInfraDeviceIds(List.of());
+
+        testOneDualHomedAddedSingleLeafPair();
+
+        ROUTE_STORE.put(P1, Sets.newHashSet(RR3));
+
+        reset(srManager.deviceConfiguration);
+        expect(srManager.deviceConfiguration.getBatchedSubnets(H3D.id()))
+                .andReturn(Lists.<Set<IpPrefix>>newArrayList(Sets.newHashSet(P1)));
+        srManager.deviceConfiguration.removeSubnet(CP2, P1);
+        expectLastCall().once();
+        replay(srManager.deviceConfiguration);
+
+        HostEvent he = new HostEvent(HostEvent.Type.HOST_MOVED, H3S, H3D);
+        routeHandler.processHostMovedEvent(he);
+
+        // We do not remove the route on CP2. Instead, we let the subnet population overrides it
+        assertEquals(2, ROUTING_TABLE.size());
+        MockRoutingTableValue rtv1 = ROUTING_TABLE.get(new MockRoutingTableKey(CP1.deviceId(), P1));
+        assertEquals(M3, rtv1.macAddress);
+        assertEquals(V3, rtv1.vlanId);
+        assertEquals(CP1.port(), rtv1.portNumber);
+
+        MockRoutingTableValue rtv2 = ROUTING_TABLE.get(new MockRoutingTableKey(CP2.deviceId(), P1));
+        assertEquals(ROUTER_MAC_1, rtv2.macAddress);
+        assertEquals(V3, rtv2.vlanId);
+        assertEquals(P9, rtv2.portNumber);
+
         // ECMP route table hasn't changed
         assertEquals(1, SUBNET_TABLE.size());
         assertTrue(SUBNET_TABLE.get(CP1).contains(P1));
@@ -510,8 +640,65 @@ public class RouteHandlerTest {
     }
 
     @Test
+    public void testDualHomedBothLocationFaiSingleLeafPair() {
+        srManager.setInfraDeviceIds(List.of());
+
+        testDualHomedSingleLocationFailSingleLeafPair();
+
+        hostService = new MockHostService(HOSTS_ONE_FAIL);
+
+        reset(srManager.deviceConfiguration);
+        srManager.deviceConfiguration.removeSubnet(CP1, P1);
+        expectLastCall().once();
+        srManager.deviceConfiguration.removeSubnet(CP2, P1);
+        expectLastCall().once();
+        replay(srManager.deviceConfiguration);
+
+        RouteEvent re = new RouteEvent(RouteEvent.Type.ROUTE_REMOVED, RR3, Sets.newHashSet(RR3));
+        routeHandler.processRouteRemoved(re);
+
+        assertEquals(0, ROUTING_TABLE.size());
+        assertEquals(0, SUBNET_TABLE.size());
+
+        verify(srManager.deviceConfiguration);
+    }
+
+    @Test
     public void testSingleHomedToDualHomed() {
         testDualHomedSingleLocationFail();
+
+        reset(srManager.deviceConfiguration);
+        expect(srManager.deviceConfiguration.getBatchedSubnets(H3S.id()))
+                .andReturn(Lists.<Set<IpPrefix>>newArrayList(Sets.newHashSet(P1)));
+        srManager.deviceConfiguration.addSubnet(CP2, P1);
+        expectLastCall().once();
+        replay(srManager.deviceConfiguration);
+
+        HostEvent he = new HostEvent(HostEvent.Type.HOST_MOVED, H3D, H3S);
+        routeHandler.processHostMovedEvent(he);
+
+        assertEquals(2, ROUTING_TABLE.size());
+        MockRoutingTableValue rtv1 = ROUTING_TABLE.get(new MockRoutingTableKey(CP1.deviceId(), P1));
+        MockRoutingTableValue rtv2 = ROUTING_TABLE.get(new MockRoutingTableKey(CP2.deviceId(), P1));
+        assertEquals(M3, rtv1.macAddress);
+        assertEquals(M3, rtv2.macAddress);
+        assertEquals(V3, rtv1.vlanId);
+        assertEquals(V3, rtv2.vlanId);
+        assertEquals(CP1.port(), rtv1.portNumber);
+        assertEquals(CP2.port(), rtv2.portNumber);
+
+        assertEquals(2, SUBNET_TABLE.size());
+        assertTrue(SUBNET_TABLE.get(CP1).contains(P1));
+        assertTrue(SUBNET_TABLE.get(CP2).contains(P1));
+
+        verify(srManager.deviceConfiguration);
+    }
+
+    @Test
+    public void testSingleHomedToDualHomedSingleLeafPair() {
+        srManager.setInfraDeviceIds(List.of());
+
+        testDualHomedSingleLocationFailSingleLeafPair();
 
         reset(srManager.deviceConfiguration);
         expect(srManager.deviceConfiguration.getBatchedSubnets(H3S.id()))
@@ -565,6 +752,28 @@ public class RouteHandlerTest {
     @Test
     public void testOneDualHomeRemoved() {
         testOneDualHomedAdded();
+
+        reset(srManager.deviceConfiguration);
+        srManager.deviceConfiguration.removeSubnet(CP1, P1);
+        expectLastCall().once();
+        srManager.deviceConfiguration.removeSubnet(CP2, P1);
+        expectLastCall().once();
+        replay(srManager.deviceConfiguration);
+
+        RouteEvent re = new RouteEvent(RouteEvent.Type.ROUTE_REMOVED, RR3, Sets.newHashSet(RR3));
+        routeHandler.processRouteRemoved(re);
+
+        assertEquals(0, ROUTING_TABLE.size());
+        assertEquals(0, SUBNET_TABLE.size());
+
+        verify(srManager.deviceConfiguration);
+    }
+
+    @Test
+    public void testOneDualHomeRemovedSingleLeafPair() {
+        srManager.setInfraDeviceIds(List.of());
+
+        testOneDualHomedAddedSingleLeafPair();
 
         reset(srManager.deviceConfiguration);
         srManager.deviceConfiguration.removeSubnet(CP1, P1);

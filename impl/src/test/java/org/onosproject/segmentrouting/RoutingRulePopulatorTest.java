@@ -75,7 +75,7 @@ public class RoutingRulePopulatorTest {
         Set<Interface> interfaces = Sets.newHashSet(u10, t10, t10n20);
         interfaceService = new MockInterfaceService(interfaces);
         deviceService = EasyMock.createMock(DeviceService.class);
-        srManager = new MockSegmentRoutingManager(Maps.newHashMap());
+        srManager = new MockSegmentRoutingManager(Maps.newHashMap(), Maps.newHashMap());
         srManager.deviceConfiguration =  EasyMock.createMock(DeviceConfiguration.class);
         srManager.interfaceService = interfaceService;
         srManager.deviceService = deviceService;
