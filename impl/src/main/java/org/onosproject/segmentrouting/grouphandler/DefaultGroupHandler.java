@@ -1784,10 +1784,8 @@ public class DefaultGroupHandler {
                                         deviceId, nid, port, edgeLabel,
                                         dstDev, neighbor);
                                 nextObjBuilder
-                                    .addTreatment(treatmentBuilder(port,
-                                                                   neighborMac,
-                                                                   dsKey.destinationSet().swap(),
-                                                                   edgeLabel));
+                                    .addTreatment(treatmentBuilder(port, neighborMac, dsKey.destinationSet().swap(),
+                                            edgeLabel, popVlanInHashGroup(dsKey.destinationSet())));
                             });
                         });
                     });
@@ -1802,12 +1800,17 @@ public class DefaultGroupHandler {
         }
 
         TrafficTreatment treatmentBuilder(PortNumber outport, MacAddress dstMac,
-                                          boolean swap, int edgeLabel) {
+                                          boolean swap, int edgeLabel, boolean popVlan) {
             TrafficTreatment.Builder tBuilder =
                     DefaultTrafficTreatment.builder();
             tBuilder.setOutput(outport)
-                .setEthDst(dstMac)
-                .setEthSrc(nodeMacAddr);
+                    .setEthDst(dstMac)
+                    .setEthSrc(nodeMacAddr);
+
+            if (popVlan) {
+                tBuilder.popVlan();
+            }
+
             if (edgeLabel != DestinationSet.NO_EDGE_LABEL) {
                 if (swap) {
                     // swap label case
