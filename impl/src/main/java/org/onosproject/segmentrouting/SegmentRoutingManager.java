@@ -1689,6 +1689,12 @@ public class SegmentRoutingManager implements SegmentRoutingService {
             .forEach(entry -> entry.getValue().cleanUpForNeighborDown(device.id()));
 
         phasedRecoveryService.reset(device.id());
+
+        // Trigger purgeAll only on devices managed by SR, other devices rely on
+        // the purgeOnDisconnection device property.
+        if (deviceConfiguration.isConfigured(device.id())) {
+            flowObjectiveService.purgeAll(device.id(), appId);
+        }
     }
 
     /**

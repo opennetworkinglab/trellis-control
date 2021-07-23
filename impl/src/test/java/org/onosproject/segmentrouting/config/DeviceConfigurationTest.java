@@ -97,8 +97,6 @@ public class DeviceConfigurationTest {
         srDevConfig.init(DEV1, CONFIG_KEY, jsonNode, mapper, config -> { });
         BasicDeviceConfig basicDeviceConfig = new BasicDeviceConfig();
         basicDeviceConfig.init(DEV1, DEV1.toString(), JsonNodeFactory.instance.objectNode(), mapper, config -> { });
-        BasicDeviceConfig purgeOnDisconnectConfig = basicDeviceConfig.purgeOnDisconnection(true);
-
 
         // Mock interface netcfg
         jsonStream = InterfaceConfig.class.getResourceAsStream("/interface1.json");
@@ -125,8 +123,6 @@ public class DeviceConfigurationTest {
                 .andReturn(basicDeviceConfig).anyTimes();
         expect(networkConfigService.getConfig(DEV1, BasicDeviceConfig.class))
                 .andReturn(basicDeviceConfig).anyTimes();
-        expect(networkConfigService.applyConfig(DEV1, BasicDeviceConfig.class, purgeOnDisconnectConfig.node()))
-                .andReturn(purgeOnDisconnectConfig).anyTimes();
         expect(networkConfigService.getSubjects(ConnectPoint.class, InterfaceConfig.class))
                 .andReturn(Sets.newHashSet(CP1, CP2)).anyTimes();
         expect(networkConfigService.getConfig(CP1, InterfaceConfig.class)).andReturn(interfaceConfig1).anyTimes();
@@ -184,11 +180,5 @@ public class DeviceConfigurationTest {
         assertTrue(devConfig.inSameSubnet(DEV1, PREFIX1.address()));
         assertTrue(devConfig.inSameSubnet(DEV1, PREFIX2.address()));
         assertFalse(devConfig.inSameSubnet(DEV1, ROUTE1.address()));
-    }
-
-    @Test
-    public void getPurgeOnDisconnect() {
-        assertNotNull(networkConfigService.getConfig(DEV1, BasicDeviceConfig.class));
-        assertTrue(networkConfigService.getConfig(DEV1, BasicDeviceConfig.class).purgeOnDisconnection());
     }
 }

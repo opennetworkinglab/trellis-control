@@ -36,7 +36,6 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.net.HostId;
 import org.onosproject.net.PortNumber;
 import org.onosproject.net.config.ConfigException;
-import org.onosproject.net.config.basics.BasicDeviceConfig;
 import org.onosproject.net.config.basics.BasicHostConfig;
 import org.onosproject.net.config.basics.InterfaceConfig;
 import org.onosproject.net.host.InterfaceIpAddress;
@@ -117,14 +116,6 @@ public class DeviceConfiguration implements DeviceProperties {
         Set<DeviceId> deviceSubjects =
                 srManager.cfgService.getSubjects(DeviceId.class, SegmentRoutingDeviceConfig.class);
         deviceSubjects.forEach(subject -> {
-            BasicDeviceConfig basicDeviceConfig = srManager.cfgService.addConfig(subject, BasicDeviceConfig.class);
-            if (!basicDeviceConfig.purgeOnDisconnection()) {
-                // Setting purge on disconnection flag for the device SR has control over.
-                // addConfig returns a config if it exists or creates a new one.
-                log.info("PurgeOnDisconnection set to true for device {}", subject);
-                basicDeviceConfig.purgeOnDisconnection(true);
-                srManager.cfgService.applyConfig(subject, BasicDeviceConfig.class, basicDeviceConfig.node());
-            }
             SegmentRoutingDeviceConfig config =
                     srManager.cfgService.getConfig(subject, SegmentRoutingDeviceConfig.class);
             SegmentRouterInfo info = new SegmentRouterInfo();
