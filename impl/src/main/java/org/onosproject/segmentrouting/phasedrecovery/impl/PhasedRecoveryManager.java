@@ -74,7 +74,7 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
     // Amount of time delayed to wait for port description (in second)
     private static final int PORT_CHECKER_INTERVAL = 1;
     // Max number of retry for port checker
-    private static final int PORT_CHECKER_RETRIES = 5;
+    private static final int PORT_CHECKER_RETRIES = 15;
     // RoutingStableChecker interval (in second)
     private static final int ROUTING_CHECKER_DELAY = 3;
     // RoutingStableChecker timeout (in second)
@@ -169,13 +169,17 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
             log.info("{} has been initialized already. Skipping.", deviceId);
             return false;
         } else {
-            Phase nextPhase = (phasedRecovery && this.srService.getPairDeviceId(deviceId).isPresent()) ?
-                    Phase.PAIR : Phase.EDGE;
-            if (nextPhase == Phase.PAIR) {
+            if (phasedRecovery) {
+                // Even in case of EDGE as next phase, it is better to drive the transition
+                // to the next phase through the port checker. If the device is reported by
+                // a non master instance the first time, ports wont be available until the next
+                // port reconciliation.
+                Phase nextPhase = this.srService.getPairDeviceId(deviceId).isPresent() ?
+                        Phase.PAIR : Phase.EDGE;
                 // Wait for the PORT_STAT before entering next phase.
                 // Note: Unlikely, when the device init fails due to PORT_STATS timeout,
                 //       it requires operator to manually move the device to the next phase by CLI command.
-                executor.schedule(new PortChecker(deviceId, PORT_CHECKER_RETRIES),
+                executor.schedule(new PortChecker(deviceId, PORT_CHECKER_RETRIES, nextPhase),
                         PORT_CHECKER_INTERVAL, TimeUnit.SECONDS);
             } else {
                 // We assume that all ports will be reported as enabled on devices that don't require phased recovery
@@ -239,16 +243,19 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
                 changeInfraPorts(deviceId, true);
                 srService.initRoute(deviceId);
                 log.info("Transitioning {} from PAIR to INFRA", deviceId);
-                monitorRoutingStability(deviceId);
+                monitorRoutingStability(deviceId, newPhase);
                 return newPhase;
             } else if (v == Phase.INFRA && newPhase == Phase.EDGE) {
                 changeEdgePorts(deviceId, true);
                 log.info("Transitioning {} from INFRA to EDGE", deviceId);
                 return newPhase;
             } else if (v == Phase.PENDING && newPhase == Phase.EDGE) {
-                changeAllPorts(deviceId, true);
+                // We want to enable ports in order - even for non paired devices
+                // newPhase is used to implement different behaviors in monitorRoutingStability
                 srService.initHost(deviceId);
+                changeInfraPorts(deviceId, true);
                 srService.initRoute(deviceId);
+                monitorRoutingStability(deviceId, newPhase);
                 log.info("Transitioning {} from PENDING to EDGE", deviceId);
                 return newPhase;
             } else {
@@ -258,7 +265,16 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
         })).map(Versioned::value).orElse(null);
     }
 
-    private void monitorRoutingStability(DeviceId deviceId) {
+    // Use current phase to implement a different behavior for non-paired or infra
+    // devices. For these devices we are just missing to enable the edge ports, while
+    // for the paired leaves we will go the final phase.
+    private void monitorRoutingStability(DeviceId deviceId, Phase currentPhase) {
+        // restrict the state machine transitions
+        if (currentPhase != Phase.INFRA && currentPhase != Phase.EDGE) {
+            log.warn("Ignore monitorRoutingStability on {} for phase {}", deviceId, currentPhase);
+            return;
+        }
+
         CompletableFuture<Void> checkerFuture = new CompletableFuture<>();
         CompletableFuture<Void> timeoutFuture =
                 Tools.completeAfter(ROUTING_CHECKER_TIMEOUT, TimeUnit.SECONDS);
@@ -272,7 +288,13 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
                 // Mark the future as completed to signify the termination of periodical checker
                 checkerFuture.complete(null);
             }
-            setPhase(deviceId, Phase.EDGE);
+            // Paired devices. Else will be performed by infra devices
+            // or non paired devices that go directly from PENDING to EDGE
+            if (currentPhase == Phase.INFRA) {
+                setPhase(deviceId, Phase.EDGE);
+            } else {
+                changeEdgePorts(deviceId, true);
+            }
         });
 
         executor.schedule(checker, ROUTING_CHECKER_DELAY, TimeUnit.SECONDS);
@@ -325,18 +347,22 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
     }
 
     private void changePorts(DeviceId deviceId, Set<PortNumber> portNumbers, boolean enabled) {
-        log.info("{} {} on {}", enabled ? "Enabled" : "Disabled", portNumbers, deviceId);
-        portNumbers.forEach(portNumber ->
-            deviceAdminService.changePortState(deviceId, portNumber, enabled));
+        if (!portNumbers.isEmpty()) {
+            log.info("{} {} on {}", enabled ? "Enabled" : "Disabled", portNumbers, deviceId);
+            portNumbers.forEach(portNumber ->
+                    deviceAdminService.changePortState(deviceId, portNumber, enabled));
+        }
     }
 
     private class PortChecker implements Runnable {
         int retries;
         DeviceId deviceId;
+        Phase nextPhase;
 
-        PortChecker(DeviceId deviceId, int retries) {
+        PortChecker(DeviceId deviceId, int retries, Phase nextPhase) {
             this.deviceId = deviceId;
             this.retries = retries;
+            this.nextPhase = nextPhase;
         }
 
         @Override
@@ -348,8 +374,9 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
             }
 
             if (!deviceAdminService.getPorts(deviceId).isEmpty()) {
-                log.info("{} reported PORT_STATS", deviceId);
-                setPhase(deviceId, Phase.PAIR);
+                log.info("{} reported PORT_STATS, moving to {}", deviceId, nextPhase);
+                setPhase(deviceId, nextPhase);
+                return;
             }
             log.info("{} still waiting for PORT_STATS", deviceId);
             executor.schedule(this, PORT_CHECKER_INTERVAL, TimeUnit.SECONDS);
