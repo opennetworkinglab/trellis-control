@@ -79,6 +79,11 @@ import static org.onlab.packet.ICMP6.NEIGHBOR_SOLICITATION;
 import static org.onlab.packet.ICMP6.ROUTER_ADVERTISEMENT;
 import static org.onlab.packet.ICMP6.ROUTER_SOLICITATION;
 import static org.onlab.packet.IPv6.PROTOCOL_ICMP6;
+import static org.onosproject.segmentrouting.metadata.SRObjectiveMetadata.CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES;
+import static org.onosproject.segmentrouting.metadata.SRObjectiveMetadata.INFRA_PORT;
+import static org.onosproject.segmentrouting.metadata.SRObjectiveMetadata.INTERFACE_CONFIG_UPDATE;
+import static org.onosproject.segmentrouting.metadata.SRObjectiveMetadata.PAIR_PORT;
+import static org.onosproject.segmentrouting.metadata.SRObjectiveMetadata.EDGE_PORT;
 
 /**
  * Populator of segment routing flow rules.
@@ -93,10 +98,6 @@ public class RoutingRulePopulator {
     private DeviceConfiguration config;
     private RouteSimplifierUtils routeSimplifierUtils;
 
-    // used for signalling the driver to remove vlan table and tmac entry also
-    private static final long CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES = 1;
-    // used for signalling the driver when not remove tmac entries
-    private static final long INTERFACE_CONFIG_UPDATE = 2;
     private static final long METADATA_MASK = 0xffffffffffffffffL;
 
     /**
@@ -819,12 +820,8 @@ public class RoutingRulePopulator {
      * @param routerIp the router ip representing the destination switch
      * @return a collection of fwdobjective
      */
-    private Collection<ForwardingObjective> handleMpls(
-                                        DeviceId targetSwId,
-                                        DeviceId destSwId,
-                                        Set<DeviceId> nextHops,
-                                        int segmentId,
-                                        IpAddress routerIp,
+    private Collection<ForwardingObjective> handleMpls(DeviceId targetSwId, DeviceId destSwId,
+                                        Set<DeviceId> nextHops, int segmentId, IpAddress routerIp,
                                         boolean isMplsBos) {
 
         TrafficSelector.Builder sbuilder = DefaultTrafficSelector.builder();
@@ -847,20 +844,13 @@ public class RoutingRulePopulator {
                     + "label {} in switch {} with pop to next-hops {}",
                     segmentId, targetSwId, nextHops);
             ForwardingObjective.Builder fwdObjNoBosBuilder =
-                    getMplsForwardingObjective(targetSwId,
-                                               nextHops,
-                                               true,
-                                               isMplsBos,
-                                               metabuilder.build(),
-                                               routerIp,
-                                               segmentId,
-                                               destSwId);
+                    getMplsForwardingObjective(targetSwId, nextHops, true, isMplsBos,
+                                               metabuilder.build(), routerIp, segmentId, destSwId);
             // Error case, we cannot handle, exit.
             if (fwdObjNoBosBuilder == null) {
                 return Collections.emptyList();
             }
             fwdObjBuilders.add(fwdObjNoBosBuilder);
-
         } else {
             // next hop is not destination, irrespective of the number of next
             // hops (1 or more) -- SR CONTINUE case (swap with self)
@@ -868,20 +858,13 @@ public class RoutingRulePopulator {
                     + "label {} in switch {} without pop to next-hops {}",
                     segmentId, targetSwId, nextHops);
             ForwardingObjective.Builder fwdObjNoBosBuilder =
-                    getMplsForwardingObjective(targetSwId,
-                                               nextHops,
-                                               false,
-                                               isMplsBos,
-                                               metabuilder.build(),
-                                               routerIp,
-                                               segmentId,
-                                               destSwId);
+                    getMplsForwardingObjective(targetSwId, nextHops, false, isMplsBos,
+                                               metabuilder.build(), routerIp, segmentId, destSwId);
             // Error case, we cannot handle, exit.
             if (fwdObjNoBosBuilder == null) {
                 return Collections.emptyList();
             }
             fwdObjBuilders.add(fwdObjNoBosBuilder);
-
         }
 
         List<ForwardingObjective> fwdObjs = Lists.newArrayList();
@@ -895,11 +878,9 @@ public class RoutingRulePopulator {
                     .withFlag(ForwardingObjective.Flag.SPECIFIC);
 
             ObjectiveContext context = new DefaultObjectiveContext(
-                    (objective) ->
-                            log.debug("MPLS rule {} for SID {} populated in dev:{} ",
+                    (objective) -> log.debug("MPLS rule {} for SID {} populated in dev:{} ",
                                       objective.id(), segmentId, targetSwId),
-                    (objective, error) ->
-                            log.warn("Failed to populate MPLS rule {} for SID {}: {} in dev:{}",
+                    (objective, error) -> log.warn("Failed to populate MPLS rule {} for SID {}: {} in dev:{}",
                                      objective.id(), segmentId, error, targetSwId));
 
             ForwardingObjective fob = fwdObjBuilder.add(context);
@@ -923,15 +904,9 @@ public class RoutingRulePopulator {
      * @param destSw the destination sw
      * @return the mpls forwarding objective builder
      */
-    private ForwardingObjective.Builder getMplsForwardingObjective(
-                                             DeviceId targetSw,
-                                             Set<DeviceId> nextHops,
-                                             boolean phpRequired,
-                                             boolean isBos,
-                                             TrafficSelector meta,
-                                             IpAddress routerIp,
-                                             int segmentId,
-                                             DeviceId destSw) {
+    private ForwardingObjective.Builder getMplsForwardingObjective(DeviceId targetSw, Set<DeviceId> nextHops,
+                                             boolean phpRequired, boolean isBos, TrafficSelector meta,
+                                             IpAddress routerIp, int segmentId, DeviceId destSw) {
 
         ForwardingObjective.Builder fwdBuilder = DefaultForwardingObjective
                 .builder().withFlag(ForwardingObjective.Flag.SPECIFIC);
@@ -996,7 +971,7 @@ public class RoutingRulePopulator {
             return null;
         } else {
             log.debug("nextObjId found:{} for mpls rule on device:{} to ds:{}",
-                      nextId, targetSw, ds);
+                    nextId, targetSw, ds);
         }
 
         fwdBuilder.nextStep(nextId);
@@ -1162,8 +1137,11 @@ public class RoutingRulePopulator {
                                                                boolean pushVlan, VlanId vlanId,
                                                                boolean doTMAC, boolean update) {
         MacAddress deviceMac;
+        long metadata = 0;
+        boolean isPairPort;
         try {
             deviceMac = config.getDeviceMac(deviceId);
+            isPairPort = portnum.equals(config.getPairLocalPort(deviceId));
         } catch (DeviceConfigNotFoundException e) {
             log.warn(e.getMessage() + " Processing SinglePortFilters aborted");
             return null;
@@ -1194,16 +1172,20 @@ public class RoutingRulePopulator {
         if (noMoreEnabledPort(deviceId, vlanId)) {
             tBuilder.wipeDeferred();
         }
-
         // NOTE: Some switch hardware share the same tmac flow among different vlans.
         //       We use this metadata to let the driver know that there is still a vlan
         //       configuration associated to that port
         if (update) {
-            tBuilder.writeMetadata(INTERFACE_CONFIG_UPDATE, METADATA_MASK);
+            metadata = metadata | INTERFACE_CONFIG_UPDATE;
+        }
+        // NOTE: Metadata to signal the driver the port type
+        metadata = metadata | portType(VlanId.NONE, vlanId, isPairPort);
+        // NOTE: metadata equals 0 is rejected by the driver
+        if (metadata > 0) {
+            tBuilder.writeMetadata(metadata, METADATA_MASK);
         }
 
         fob.withMeta(tBuilder.build());
-
         fob.permit().fromApp(srManager.appId);
         return fob;
     }
@@ -1222,9 +1204,8 @@ public class RoutingRulePopulator {
         // We should trigger the removal of double tagged rules only when removing
         // the filtering objective and no other hosts are connected to the same device port.
         boolean cleanupDoubleTaggedRules = !anyDoubleTaggedHost(deviceId, portNum) && !install;
-        FilteringObjective.Builder fob = buildDoubleTaggedFilteringObj(deviceId, portNum,
-                                                                       outerVlan, innerVlan,
-                                                                       cleanupDoubleTaggedRules);
+        FilteringObjective.Builder fob = buildDoubleTaggedFilteringObj(deviceId, portNum, outerVlan,
+                                                                       innerVlan, cleanupDoubleTaggedRules);
         if (fob == null) {
             // error encountered during build
             return;
@@ -1264,8 +1245,11 @@ public class RoutingRulePopulator {
                                                                      VlanId outerVlan, VlanId innerVlan,
                                                                      boolean cleanupDoubleTaggedRules) {
         MacAddress deviceMac;
+        long metadata = 0;
+        boolean isPairPort;
         try {
             deviceMac = config.getDeviceMac(deviceId);
+            isPairPort = portNum.equals(config.getPairLocalPort(deviceId));
         } catch (DeviceConfigNotFoundException e) {
             log.warn(e.getMessage() + " Processing DoubleTaggedFilters aborted");
             return null;
@@ -1282,13 +1266,16 @@ public class RoutingRulePopulator {
         // Pop outer vlan
         tBuilder.popVlan();
 
-        // special metadata for driver
+        // NOTE: Special metadata for driver to signal when clean up double tagged entries
         if (cleanupDoubleTaggedRules) {
-            tBuilder.writeMetadata(CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES, METADATA_MASK);
-        } else {
-            tBuilder.writeMetadata(0, METADATA_MASK);
+            metadata = metadata | CLEANUP_DOUBLE_TAGGED_HOST_ENTRIES;
         }
-
+        // NOTE: Metadata to signal the port type to the driver
+        metadata = metadata | portType(innerVlan, outerVlan, isPairPort);
+        // NOTE: metadata equals 0 is rejected by the driver
+        if (metadata > 0) {
+            tBuilder.writeMetadata(metadata, METADATA_MASK);
+        }
         // NOTE: Some switch hardware share the same filtering flow among different ports.
         //       We use this metadata to let the driver know that there is no more enabled port
         //       within the same VLAN on this device.
@@ -1297,9 +1284,29 @@ public class RoutingRulePopulator {
         }
 
         fob.withMeta(tBuilder.build());
-
         fob.permit().fromApp(srManager.appId);
         return fob;
+    }
+
+    // Returns port type based on the input parameters
+    private long portType(VlanId innerVlanId, VlanId outerVlanId, boolean isPairPort) {
+        if (isPairPort) {
+            return PAIR_PORT;
+        }
+
+        // Look at the vlan config to determine if it is an INFRA or an EDGE port
+        boolean outerVlanValid = outerVlanId != null && !outerVlanId.equals(VlanId.NONE);
+        boolean innerVlanValid = innerVlanId != null && !innerVlanId.equals(VlanId.NONE);
+
+        // double tagged interfaces are always edge ports. Edge ports do not match on the
+        // transport vlans (default internal vlan and pw transport vlan)
+        if ((innerVlanValid && outerVlanValid) ||
+                (outerVlanValid && !outerVlanId.equals(srManager.getDefaultInternalVlan()) &&
+                        !outerVlanId.equals(srManager.getPwTransportVlan()))) {
+            return EDGE_PORT;
+        }
+
+        return INFRA_PORT;
     }
 
     /**
@@ -1409,7 +1416,6 @@ public class RoutingRulePopulator {
     void manageSingleIpPunts(DeviceId deviceId, IpAddress ipAddress, boolean request) {
         TrafficSelector.Builder sbuilder = buildIpSelectorFromIpAddress(ipAddress);
         Optional<DeviceId> optDeviceId = Optional.of(deviceId);
-
         if (request) {
             srManager.packetService.requestPackets(sbuilder.build(),
                                                    PacketPriority.CONTROL, srManager.appId, optDeviceId);

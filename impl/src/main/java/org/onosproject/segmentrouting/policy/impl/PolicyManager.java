@@ -92,6 +92,7 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import static org.onlab.util.Tools.groupedThreads;
+import static org.onosproject.segmentrouting.metadata.SRObjectiveMetadata.EDGE_PORT;
 import static org.slf4j.LoggerFactory.getLogger;
 
 /**
@@ -109,9 +110,6 @@ public class PolicyManager implements PolicyService {
     // Supported policies
     private static final Set<PolicyType> SUPPORTED_POLICIES = ImmutableSet.of(
             PolicyType.DROP, PolicyType.REDIRECT);
-
-    // Driver should use this meta to match ig_port_type field in the ACL table
-    private static final long EDGE_PORT = 1;
 
     // Policy/TrafficMatch store related objects. We use these consistent maps to keep track of the
     // lifecycle of a policy/traffic match. These are decomposed in multiple operations which have
@@ -881,6 +879,7 @@ public class PolicyManager implements PolicyService {
 
     private ForwardingObjective.Builder trafficMatchFwdObjective(TrafficMatch trafficMatch, PolicyType policyType) {
         TrafficSelector.Builder metaBuilder = DefaultTrafficSelector.builder(trafficMatch.trafficSelector());
+        // Driver should use this meta to match ig_port_type field in the ACL table
         if (policyType == PolicyType.REDIRECT) {
             metaBuilder.matchMetadata(EDGE_PORT);
         }
