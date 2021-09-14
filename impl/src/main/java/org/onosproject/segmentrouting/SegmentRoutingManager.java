@@ -516,6 +516,8 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                                       "fallbackFlowPollFrequency", "4", false);
         compCfgService.preSetProperty("org.onosproject.net.group.impl.GroupManager",
                                       "fallbackGroupPollFrequency", "3", false);
+        compCfgService.preSetProperty("org.onosproject.net.meter.impl.MeterManager",
+                                      "fallbackMeterPollFrequency", "3", false);
         compCfgService.registerProperties(getClass());
         modified(context);
 
