@@ -22,6 +22,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import org.onlab.packet.EthType;
 import com.google.common.collect.Streams;
 import org.onlab.packet.Ip4Address;
@@ -67,6 +69,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -107,10 +110,13 @@ public class DefaultRoutingHandler {
     private Instant lastRoutingChange = Instant.EPOCH;
     private Instant lastFullReroute = Instant.EPOCH;
 
-    // Distributed store to keep track of ONOS instance that should program the
-    // device pair. There should be only one instance (the king) that programs the same pair.
-    Map<Set<DeviceId>, NodeId> shouldProgram;
-    Map<DeviceId, Boolean> shouldProgramCache;
+    /*
+     * Store to keep track of ONOS instance that should program the device pair.
+     * There should be only one instance (the leader) that programs the same pair.
+     * This EC map is used as first source of truth. WorkPartitionService is used
+     * to elect a leader when shouldProgram is empty.
+     */
+    Map<DeviceId, NodeId> shouldProgram;
 
     // Distributed routes store to keep track of the routes already seen
     // destination device is the key and target sw is the value
@@ -136,12 +142,32 @@ public class DefaultRoutingHandler {
     }
 
     /**
+     * Deterministic hashing for the shouldProgram logic.
+     */
+    private static Long consistentHasher(EdgePair pair) {
+        Hasher hasher = Hashing.md5().newHasher();
+        long dev1Hash = hasher.putUnencodedChars(pair.dev1.toString())
+                .hash()
+                .asLong();
+        hasher = Hashing.md5().newHasher();
+        long dev2Hash = hasher.putUnencodedChars(pair.dev2.toString())
+                .hash()
+                .asLong();
+        return dev1Hash + dev2Hash;
+    }
+
+    /**
+     * Implements the hash function for the shouldProgram logic.
+     */
+    protected static final Function<EdgePair, Long> HASH_FUNCTION = DefaultRoutingHandler::consistentHasher;
+
+    /**
      * Creates a DefaultRoutingHandler object.
      *
      * @param srManager SegmentRoutingManager object
      */
     DefaultRoutingHandler(SegmentRoutingManager srManager) {
-        this.shouldProgram = srManager.storageService.<Set<DeviceId>, NodeId>consistentMapBuilder()
+        this.shouldProgram = srManager.storageService.<DeviceId, NodeId>consistentMapBuilder()
                 .withName("sr-should-program")
                 .withSerializer(Serializer.using(KryoNamespaces.API))
                 .withRelaxedReadConsistency()
@@ -151,7 +177,6 @@ public class DefaultRoutingHandler {
                 .withSerializer(Serializer.using(KryoNamespaces.API))
                 .withRelaxedReadConsistency()
                 .build();
-        this.shouldProgramCache = Maps.newConcurrentMap();
         update(srManager);
         this.routePopulators = new PredictableExecutor(DEFAULT_THREADS,
                                                       groupedThreads("onos/sr", "r-populator-%d", log));
@@ -290,6 +315,8 @@ public class DefaultRoutingHandler {
             }
 
             log.debug("seenBeforeRoutes size {}", seenBeforeRoutes.size());
+            seenBeforeRoutes.forEach(entry -> log.debug("{} -> {}", entry.getValue(), entry.getKey()));
+
             if (!redoRouting(routeChanges, edgePairs, null)) {
                 log.debug("populateAllRoutingRules: populationStatus is ABORTED");
                 populationStatus = Status.ABORTED;
@@ -351,7 +378,10 @@ public class DefaultRoutingHandler {
                     log.trace("  Current/Existing SPG: {}", entry.getValue());
                 }
             });
+
             log.debug("seenBeforeRoutes size {}", seenBeforeRoutes.size());
+            seenBeforeRoutes.forEach(entry -> log.debug("{} -> {}", entry.getValue(), entry.getKey()));
+
             Set<EdgePair> edgePairs = new HashSet<>();
             Set<ArrayList<DeviceId>> routeChanges = new HashSet<>();
             boolean handleRouting = false;
@@ -505,6 +535,7 @@ public class DefaultRoutingHandler {
             log.debug("populateRoutingRulesForLinkStatusChange: "
                     + "populationStatus is STARTED");
             log.debug("seenBeforeRoutes size {}", seenBeforeRoutes.size());
+            seenBeforeRoutes.forEach(entry -> log.debug("{} -> {}", entry.getValue(), entry.getKey()));
             populationStatus = Status.STARTED;
             rulePopulator.resetCounter(); //XXX maybe useful to have a rehash ctr
             boolean hashGroupsChanged = false;
@@ -1351,7 +1382,7 @@ public class DefaultRoutingHandler {
 
     /**
      * Populates IP rules for a route that has direct connection to the switch
-     * if the current instance is the master of the switch.
+     * if the current instance is leading the programming of the switch.
      *
      * @param deviceId device ID of the device that next hop attaches to
      * @param prefix IP prefix of the route
@@ -1372,7 +1403,7 @@ public class DefaultRoutingHandler {
 
     /**
      * Removes IP rules for a route when the next hop is gone.
-     * if the current instance is the master of the switch.
+     * if the current instance is leading the programming of the switch.
      *
      * @param deviceId device ID of the device that next hop attaches to
      * @param prefix IP prefix of the route
@@ -1423,7 +1454,7 @@ public class DefaultRoutingHandler {
     }
 
     /**
-     * Populates IP rules for a route when the next hop is double-tagged.
+     * Program IP rules for a route when the next hop is double-tagged.
      *
      * @param deviceId  device ID that next hop attaches to
      * @param prefix    IP prefix of the route
@@ -1432,53 +1463,21 @@ public class DefaultRoutingHandler {
      * @param outerVlan Outer Vlan ID of the next hop
      * @param outerTpid Outer TPID of the next hop
      * @param outPort   port that the next hop attaches to
+     * @param install   whether or not install the route
      */
-    void populateDoubleTaggedRoute(DeviceId deviceId, IpPrefix prefix, MacAddress hostMac, VlanId innerVlan,
-                                   VlanId outerVlan, EthType outerTpid, PortNumber outPort) {
-        if (srManager.mastershipService.isLocalMaster(deviceId)) {
-            srManager.routingRulePopulator.populateDoubleTaggedRoute(
-                    deviceId, prefix, hostMac, innerVlan, outerVlan, outerTpid, outPort);
+    void programDoubleTaggedRoute(DeviceId deviceId, IpPrefix prefix, MacAddress hostMac, VlanId innerVlan,
+                                  VlanId outerVlan, EthType outerTpid, PortNumber outPort, boolean install) {
+        if (shouldProgram(deviceId)) {
+            if (install) {
+                srManager.routingRulePopulator.populateDoubleTaggedRoute(
+                        deviceId, prefix, hostMac, innerVlan, outerVlan, outerTpid, outPort);
+            } else {
+                srManager.routingRulePopulator.revokeDoubleTaggedRoute(
+                        deviceId, prefix, hostMac, innerVlan, outerVlan, outerTpid, outPort);
+            }
             srManager.routingRulePopulator.processDoubleTaggedFilter(
-                    deviceId, outPort, outerVlan, innerVlan, true);
+                    deviceId, outPort, outerVlan, innerVlan, install);
         }
-    }
-
-    /**
-     * Revokes IP rules for a route when the next hop is double-tagged.
-     *
-     * @param deviceId  device ID that next hop attaches to
-     * @param prefix    IP prefix of the route
-     * @param hostMac   MAC address of the next hop
-     * @param innerVlan Inner Vlan ID of the next hop
-     * @param outerVlan Outer Vlan ID of the next hop
-     * @param outerTpid Outer TPID of the next hop
-     * @param outPort   port that the next hop attaches to
-     */
-    void revokeDoubleTaggedRoute(DeviceId deviceId, IpPrefix prefix, MacAddress hostMac, VlanId innerVlan,
-                                 VlanId outerVlan, EthType outerTpid, PortNumber outPort) {
-        // Revoke route either if this node have the mastership (when device is available) or
-        // if this node is the leader (even when device is unavailable)
-        if (!srManager.mastershipService.isLocalMaster(deviceId)) {
-            if (srManager.deviceService.isAvailable(deviceId)) {
-                // Master node will revoke specified rule.
-                log.debug("This node is not a master for {}, stop revoking route.", deviceId);
-                return;
-            }
-
-            // isLocalMaster will return false when the device is unavailable.
-            // Verify if this node is the leader in that case.
-            NodeId leader = srManager.leadershipService.runForLeadership(
-                    deviceId.toString()).leaderNodeId();
-            if (!srManager.clusterService.getLocalNode().id().equals(leader)) {
-                // Leader node will revoke specified rule.
-                log.debug("This node is not a master for {}, stop revoking route.", deviceId);
-                return;
-            }
-        }
-
-        srManager.routingRulePopulator.revokeDoubleTaggedRoute(deviceId, prefix, hostMac,
-                innerVlan, outerVlan, outerTpid, outPort);
-        srManager.routingRulePopulator.processDoubleTaggedFilter(deviceId, outPort, outerVlan, innerVlan, false);
     }
 
     /**
@@ -1533,6 +1532,12 @@ public class DefaultRoutingHandler {
                                        MASTER_CHANGE_DELAY, TimeUnit.MILLISECONDS);
     }
 
+    /*
+     * Even though the current implementation does not heavily rely
+     * on mastership, we keep using the mastership and cluster events
+     * as heuristic to perform full reroutes and to make sure we don't
+     * lose any event when instances fail.
+     */
     protected final class MasterChange implements Runnable {
         private DeviceId devId;
         private MastershipEvent me;
@@ -1589,16 +1594,16 @@ public class DefaultRoutingHandler {
                 log.warn("Mastership changed for dev: {}/{} while programming route-paths "
                         + "due to clusterEvent {} ms ago .. attempting full reroute",
                          devId, me.roleInfo(), lce);
-                if (srManager.mastershipService.isLocalMaster(devId)) {
-                    // old master could have died when populating filters
+                if (shouldProgram(devId)) {
+                    // old leader could have died when populating filters
                     populatePortAddressingRules(devId);
                 }
-                // old master could have died when creating groups
+                // old leader could have died when creating groups
                 // XXX right now we have no fine-grained way to only make changes
                 // for the route paths affected by this device. Thus we do a
                 // full reroute after purging all hash groups. We also try to do
                 // it only once, irrespective of the number of devices
-                // that changed mastership when their master instance died.
+                // that changed mastership when their leader instance died.
                 long lfrr = Instant.now().toEpochMilli() - lastFullReroute.toEpochMilli();
                 boolean doFullReroute = lfrr > FULL_REROUTE_THRESHOLD;
                 if (doFullReroute) {
@@ -1675,7 +1680,7 @@ public class DefaultRoutingHandler {
                 continue;
             }
             for (DeviceId rootSw : deviceAndItsPair(sw.id())) {
-                // check for mastership change since last run
+                // check for leadership change since last run
                 if (!lastProgrammed.contains(sw.id())) {
                     log.warn("New responsibility for this node to program dev:{}"
                             + " ... nuking current ECMPspg", sw.id());
@@ -1766,7 +1771,7 @@ public class DefaultRoutingHandler {
                                   link.dst().deviceId());
                     }
                 }
-                // check for mastership change since last run
+                // check for leadership change since last run
                 if (!lastProgrammed.contains(sw.id())) {
                     log.warn("New responsibility for this node to program dev:{}"
                             + " ... nuking current ECMPspg", sw.id());
@@ -1806,8 +1811,7 @@ public class DefaultRoutingHandler {
             if (!pairDev.isPresent() || !srManager.deviceService.isAvailable(pairDev.get())) {
                 log.debug("Proxy Route changes to downed Sw:{}", failedSwitch);
                 srManager.deviceService.getDevices().forEach(dev -> {
-                    if (!dev.id().equals(failedSwitch) &&
-                            srManager.mastershipService.isLocalMaster(dev.id())) {
+                    if (!dev.id().equals(failedSwitch) && shouldProgram(dev.id())) {
                         log.debug(" : {}", dev.id());
                         changedRtBldr.add(Lists.newArrayList(dev.id(), failedSwitch));
                     }
@@ -1970,88 +1974,46 @@ public class DefaultRoutingHandler {
     }
 
     /**
-     * Determines whether this controller instance should program the
-     * given {@code deviceId}, based on mastership and pairDeviceId if one exists.
-     * <p>
-     * Once an instance is elected, it will be the only instance responsible for programming
-     * both devices in the pair until it goes down.
+     * Determines whether this controller instance should program the given deviceId, based on
+     * workPartitionService and pairDeviceId if one exists. Once an instance is elected, it will
+     * be the only instance responsible for programming both devices in the pair until it goes down.
      *
-     * @param deviceId device identifier to consider for routing
-     * @return true if current instance should handle the routing for given device
+     * @param deviceId the device id
+     * @return true if this instance leads the programming, false otherwise
      */
-    boolean shouldProgram(DeviceId deviceId) {
-        Boolean cached = shouldProgramCache.get(deviceId);
-        if (cached != null) {
-            log.debug("shouldProgram dev:{} cached:{}", deviceId, cached);
-            return cached;
-        }
-
-        Optional<DeviceId> pairDeviceId = srManager.getPairDeviceId(deviceId);
-
+    public boolean shouldProgram(DeviceId deviceId) {
+        NodeId leader = shouldProgram.get(deviceId);
         NodeId currentNodeId = srManager.clusterService.getLocalNode().id();
-        NodeId masterNodeId = srManager.mastershipService.getMasterFor(deviceId);
-        Optional<NodeId> pairMasterNodeId = pairDeviceId.map(srManager.mastershipService::getMasterFor);
-        log.debug("Evaluate shouldProgram {}/pair={}. currentNodeId={}, master={}, pairMaster={}",
-                deviceId, pairDeviceId, currentNodeId, masterNodeId, pairMasterNodeId);
-
-        // No pair device configured. Only handle when current instance is the master of the device
-        if (!pairDeviceId.isPresent()) {
-            log.debug("No pair device. currentNodeId={}, master={}", currentNodeId, masterNodeId);
-            return currentNodeId.equals(masterNodeId);
+        if (leader != null) {
+            log.trace("shouldProgram dev:{} leader:{}", deviceId, leader);
+            return currentNodeId.equals(leader);
         }
 
-        // Should not handle if current instance is not the master of either switch
-        if (!currentNodeId.equals(masterNodeId) &&
-                !(pairMasterNodeId.isPresent() && currentNodeId.equals(pairMasterNodeId.get()))) {
-            log.debug("Current nodeId {} is neither the master of target device {} nor pair device {}",
-                    currentNodeId, deviceId, pairDeviceId);
-            return false;
-        }
+        // hash function is independent from the order of the devices in the edge pair
+        Optional<DeviceId> pairDeviceId = srManager.getPairDeviceId(deviceId);
+        EdgePair edgePair = new EdgePair(deviceId, pairDeviceId.orElse(DeviceId.NONE));
 
-        Set<DeviceId> key = Sets.newHashSet(deviceId, pairDeviceId.get());
-
-        NodeId king = shouldProgram.compute(key, ((k, v) -> {
-            if (v == null) {
-                // There is no value in the map. Elect a node
-                return elect(Lists.newArrayList(masterNodeId, pairMasterNodeId.orElse(null)));
-            } else {
-                if (v.equals(masterNodeId) || v.equals(pairMasterNodeId.orElse(null))) {
-                    // Use the node in the map if it is still alive and is a master of any of the two switches
-                    return v;
-                } else {
-                    // Previously elected node is no longer the master of either switch. Re-elect a node.
-                    return elect(Lists.newArrayList(masterNodeId, pairMasterNodeId.orElse(null)));
-                }
-            }
-        }));
-
-        if (king != null) {
-            log.debug("{} is king, should handle routing for {}/pair={}", king, deviceId, pairDeviceId);
-            shouldProgramCache.put(deviceId, king.equals(currentNodeId));
-            return king.equals(currentNodeId);
+        leader = srManager.workPartitionService.getLeader(edgePair, HASH_FUNCTION);
+        if (leader != null) {
+            log.debug("{} is the leader, should handle routing for {}/pair={}", leader, deviceId,
+                    pairDeviceId);
+            shouldProgram.put(deviceId, leader);
+            return leader.equals(currentNodeId);
         } else {
-            log.error("Fail to elect a king for {}/pair={}. Abort.", deviceId, pairDeviceId);
-            shouldProgramCache.remove(deviceId);
+            log.error("Fail to elect a leader for {}/pair={}. Abort.", deviceId, pairDeviceId);
+            shouldProgram.remove(deviceId);
             return false;
         }
     }
 
-    /**
-     * Elects a node who should take responsibility of programming devices.
-     * @param nodeIds list of candidate node ID
-     *
-     * @return NodeId of the node that gets elected, or null if none of the node can be elected
-     */
-    private NodeId elect(List<NodeId> nodeIds) {
-        // Remove all null elements. This could happen when some device has no master
-        nodeIds.removeAll(Collections.singleton(null));
-        nodeIds.sort(null);
-        return nodeIds.size() == 0 ? null : nodeIds.get(0);
+    void invalidateShouldProgram(DeviceId deviceId) {
+        shouldProgram.remove(deviceId);
     }
 
-    void invalidateShouldProgramCache(DeviceId deviceId) {
-        shouldProgramCache.remove(deviceId);
+    void invalidateShouldProgram() {
+        shouldProgram.clear();
     }
+
 
     /**
      * Returns a set of device ID, containing given device and its pair device if exist.
@@ -2147,7 +2109,8 @@ public class DefaultRoutingHandler {
     /**
      * Populates filtering rules for port, and punting rules
      * for gateway IPs, loopback IPs and arp/ndp traffic.
-     * Should only be called by the master instance for this device/port.
+     * Should only be called by the instance leading the programming
+     * for this device/port.
      *
      * @param deviceId Switch ID to set the rules
      */

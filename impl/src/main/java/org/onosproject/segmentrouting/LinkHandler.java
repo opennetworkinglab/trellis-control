@@ -160,7 +160,7 @@ public class LinkHandler {
                     .populateRoutingRulesForLinkStatusChange(null, ulink, null,
                             (seenBefore.contains(ulink) && seenBefore.contains(getReverseLink(ulink))));
 
-            if (srManager.mastershipService.isLocalMaster(ulink.src().deviceId())) {
+            if (srManager.shouldProgram(ulink.src().deviceId())) {
                 // handle edge-ports for dual-homed hosts
                 updateHostPorts(ulink, true);
 
@@ -215,7 +215,7 @@ public class LinkHandler {
             log.warn("received a link down for the link {} which is not in the store", link);
         }
         // handle edge-ports for dual-homed hosts
-        if (srManager.mastershipService.isLocalMaster(link.src().deviceId())) {
+        if (srManager.shouldProgram(link.src().deviceId())) {
             updateHostPorts(link, false);
         }
 
@@ -252,16 +252,16 @@ public class LinkHandler {
             DefaultGroupHandler groupHandler = srManager.groupHandlerMap
                     .get(ulink.src().deviceId());
             if (groupHandler != null) {
-                if (srManager.mastershipService.isLocalMaster(ulink.src().deviceId())
+                if (srManager.shouldProgram(ulink.src().deviceId())
                         && isParallelLink(ulink)) {
                     log.debug("* retrying hash for parallel link removed:{}", ulink);
                     groupHandler.retryHash(ulink, true, false);
                 } else {
                     log.debug("Not attempting retry-hash for link removed: {} .. {}",
                               ulink,
-                              (srManager.mastershipService.isLocalMaster(ulink
+                              (srManager.shouldProgram(ulink
                                       .src().deviceId())) ? "not parallel"
-                                                          : "not master");
+                                                          : "not handling programming");
                 }
                 // ensure local stores are updated after all rerouting or rehashing
                 groupHandler.portDownForLink(ulink);

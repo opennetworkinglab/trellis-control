@@ -22,7 +22,6 @@ import org.onlab.util.Tools;
 import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
-import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Port;
 import org.onosproject.net.PortNumber;
@@ -90,9 +89,6 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
     private DeviceAdminService deviceAdminService;
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    private MastershipService mastershipService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private StorageService storageService;
 
     @Reference(cardinality = ReferenceCardinality.OPTIONAL)
@@ -157,8 +153,9 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
             log.info("SegmentRoutingService is not ready");
             return false;
         }
-        if (!mastershipService.isLocalMaster(deviceId)) {
-            log.info("Not master of {}", deviceId);
+
+        if (!srService.shouldProgram(deviceId)) {
+            log.info("Skip init not leading the phase recovery of {}", deviceId);
             return false;
         }
 
@@ -195,8 +192,11 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
             log.info("SegmentRoutingService is not ready");
             return false;
         }
-        // FIXME Skip mastership checking since master will not be available when a device goes offline
-        //       Improve this when persistent mastership is introduced
+
+        if (!srService.shouldProgram(deviceId)) {
+            log.info("Skip reset not leading the phase recovery of {}", deviceId);
+            return false;
+        }
 
         Phase result = Optional.ofNullable(phasedRecoveryStore.remove(deviceId))
                 .map(Versioned::value).orElse(null);
@@ -222,8 +222,9 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
             log.info("SegmentRoutingService is not ready");
             return null;
         }
-        if (!mastershipService.isLocalMaster(deviceId)) {
-            log.info("Not master of {}", deviceId);
+
+        if (!srService.shouldProgram(deviceId)) {
+            log.info("Skip setPhase not leading the phase recovery of {}", deviceId);
             return null;
         }
 
@@ -407,4 +408,6 @@ public class PhasedRecoveryManager implements PhasedRecoveryService {
             }
         }
     }
+
+    // FIXME We should handle cluster events to resume the phase recovery
 }

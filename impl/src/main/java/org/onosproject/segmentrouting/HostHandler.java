@@ -144,7 +144,7 @@ public class HostHandler {
         // ensure dual-homed host locations have viable uplinks
         if (effectiveLocations(host).size() > 1 || srManager.singleHomedDown) {
             effectiveLocations(host).forEach(loc -> {
-                if (srManager.mastershipService.isLocalMaster(loc.deviceId())) {
+                if (srManager.shouldProgram(loc.deviceId())) {
                     srManager.linkHandler.checkUplinksForHost(loc);
                 }
             });
@@ -442,7 +442,7 @@ public class HostHandler {
         // ensure dual-homed host locations have viable uplinks
         if (newLocations.size() > prevLocations.size() || srManager.singleHomedDown) {
             newLocations.forEach(loc -> {
-                if (srManager.mastershipService.isLocalMaster(loc.deviceId())) {
+                if (srManager.shouldProgram(loc.deviceId())) {
                     srManager.linkHandler.checkUplinksForHost(loc);
                 }
             });
@@ -688,13 +688,8 @@ public class HostHandler {
         }
         log.info("{} routing rule for double-tagged host {} at {}",
                  revoke ? "Revoking" : "Populating", ip, location);
-        if (revoke) {
-            srManager.defaultRoutingHandler.revokeDoubleTaggedRoute(
-                    deviceId, ip.toIpPrefix(), mac, innerVlan, outerVlan, outerTpid, port);
-        } else {
-            srManager.defaultRoutingHandler.populateDoubleTaggedRoute(
-                    deviceId, ip.toIpPrefix(), mac, innerVlan, outerVlan, outerTpid, port);
-        }
+        srManager.defaultRoutingHandler.programDoubleTaggedRoute(
+                deviceId, ip.toIpPrefix(), mac, innerVlan, outerVlan, outerTpid, port, !revoke);
     }
 
     void populateAllDoubleTaggedHost() {

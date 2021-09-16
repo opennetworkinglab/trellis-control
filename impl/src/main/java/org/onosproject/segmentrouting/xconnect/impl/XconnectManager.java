@@ -27,9 +27,6 @@ import org.onlab.packet.Ethernet;
 import org.onlab.packet.MacAddress;
 import org.onlab.packet.VlanId;
 import org.onlab.util.KryoNamespace;
-import org.onosproject.cluster.ClusterService;
-import org.onosproject.cluster.LeadershipService;
-import org.onosproject.cluster.NodeId;
 import org.onosproject.codec.CodecService;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -37,7 +34,6 @@ import org.onosproject.portloadbalancer.api.PortLoadBalancerEvent;
 import org.onosproject.portloadbalancer.api.PortLoadBalancerId;
 import org.onosproject.portloadbalancer.api.PortLoadBalancerListener;
 import org.onosproject.portloadbalancer.api.PortLoadBalancerService;
-import org.onosproject.mastership.MastershipService;
 import org.onosproject.net.ConnectPoint;
 import org.onosproject.net.DeviceId;
 import org.onosproject.net.Host;
@@ -134,15 +130,6 @@ public class XconnectManager implements XconnectService {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     public FlowObjectiveService flowObjectiveService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    private LeadershipService leadershipService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    private ClusterService clusterService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    public MastershipService mastershipService;
 
     @Reference(cardinality = ReferenceCardinality.OPTIONAL)
     public SegmentRoutingService srService;
@@ -398,8 +385,8 @@ public class XconnectManager implements XconnectService {
             deviceEventExecutor.execute(() -> {
                 DeviceId deviceId = event.subject().id();
                 // Just skip if we are not the leader
-                if (!isLocalLeader(deviceId)) {
-                    log.debug("Not the leader of {}. Skip event {}", deviceId, event);
+                if (!srService.shouldProgram(deviceId)) {
+                    log.debug("Not leading the programming of {}. Skip event {}", deviceId, event);
                     return;
                 }
                 // Populate or revoke according to the device availability
@@ -536,7 +523,7 @@ public class XconnectManager implements XconnectService {
      * @param endpoints a set of endpoints to be cross-connected
      */
     private void populateXConnect(XconnectKey key, Set<XconnectEndpoint> endpoints) {
-        if (!isLocalLeader(key.deviceId())) {
+        if (!srService.shouldProgram(key.deviceId())) {
             log.debug("Abort populating XConnect {}: {}", key, ERROR_NOT_LEADER);
             return;
         }
@@ -649,7 +636,7 @@ public class XconnectManager implements XconnectService {
      * @param endpoints XConnect endpoints
      */
     private void revokeXConnect(XconnectKey key, Set<XconnectEndpoint> endpoints) {
-        if (!isLocalLeader(key.deviceId())) {
+        if (!srService.shouldProgram(key.deviceId())) {
             log.debug("Abort revoking XConnect {}: {}", key, ERROR_NOT_LEADER);
             return;
         }
@@ -792,7 +779,7 @@ public class XconnectManager implements XconnectService {
      */
     private void updateXConnect(XconnectKey key, Set<XconnectEndpoint> prevEndpoints,
                                 Set<XconnectEndpoint> endpoints) {
-        if (!isLocalLeader(key.deviceId())) {
+        if (!srService.shouldProgram(key.deviceId())) {
             log.debug("Abort updating XConnect {}: {}", key, ERROR_NOT_LEADER);
             return;
         }
@@ -965,7 +952,7 @@ public class XconnectManager implements XconnectService {
     private void updateL2Flooding(DeviceId deviceId, PortNumber port, VlanId vlanId, boolean install) {
         XconnectKey key = new XconnectKey(deviceId, vlanId);
         // Ensure leadership on device
-        if (!isLocalLeader(deviceId)) {
+        if (!srService.shouldProgram(deviceId)) {
             log.debug("Abort updating L2Flood {}: {}", key, ERROR_NOT_LEADER);
             return;
         }
@@ -1258,22 +1245,6 @@ public class XconnectManager implements XconnectService {
     private boolean hasAccessPortInMulticastGroup(VlanNextObjectiveStoreKey groupKey, PortNumber pairPort) {
         List<PortNumber> ports = Versioned.valueOrElse(xconnectMulticastPortsStore.get(groupKey), ImmutableList.of());
         return ports.stream().anyMatch(p -> !p.equals(pairPort));
-    }
-
-    // Custom-built function, when the device is not available we need a fallback mechanism
-    private boolean isLocalLeader(DeviceId deviceId) {
-        if (!mastershipService.isLocalMaster(deviceId)) {
-            // When the device is available we just check the mastership
-            if (deviceService.isAvailable(deviceId)) {
-                return false;
-            }
-            // Fallback with Leadership service - device id is used as topic
-            NodeId leader = leadershipService.runForLeadership(
-                    deviceId.toString()).leaderNodeId();
-            // Verify if this node is the leader
-            return clusterService.getLocalNode().id().equals(leader);
-        }
-        return true;
     }
 
     private Set<PortNumber> getPhysicalPorts(DeviceId deviceId, XconnectEndpoint endpoint) {

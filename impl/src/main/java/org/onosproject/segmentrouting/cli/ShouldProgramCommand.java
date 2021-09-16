@@ -24,7 +24,6 @@ import org.onosproject.net.DeviceId;
 import org.onosproject.segmentrouting.SegmentRoutingService;
 
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Display current shouldProgram map.
@@ -36,13 +35,9 @@ public class ShouldProgramCommand extends AbstractShellCommand {
     @Override
     protected void doExecute() {
         SegmentRoutingService srService = AbstractShellCommand.get(SegmentRoutingService.class);
-        Map<Set<DeviceId>, NodeId> shouldProgram = srService.getShouldProgram();
-        Map<DeviceId, Boolean> shouldProgramCache = srService.getShouldProgramCache();
+        Map<DeviceId, NodeId> shouldProgram = srService.getShouldProgramLeaders();
 
         print("shouldProgram");
         shouldProgram.forEach((k, v) -> print("%s -> %s", k, v));
-
-        print("shouldProgramCache");
-        shouldProgramCache.forEach((k, v) -> print("%s -> %s", k, v));
     }
 }

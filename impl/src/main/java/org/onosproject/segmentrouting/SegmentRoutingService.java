@@ -329,21 +329,36 @@ public interface SegmentRoutingService {
      * Returns shouldProgram map.
      *
      * @return shouldProgram map
+     * @deprecated in trellis-control-3.0.1
      */
+    @Deprecated
     Map<Set<DeviceId>, NodeId> getShouldProgram();
 
     /**
      * Returns shouldProgram local cache.
      *
      * @return shouldProgram local cache
+     * @deprecated in trellis-control-3.0.1
      */
+    @Deprecated
     Map<DeviceId, Boolean> getShouldProgramCache();
 
     /**
-     * Returns whether instance should program device or not.
+     * Returns shouldProgram leaders.
      *
-     * @param deviceId .
-     * @return boolean status saying instance should program device or not.
+     * @return shouldProgram mapping device to node
+     */
+    Map<DeviceId, NodeId> getShouldProgramLeaders();
+
+    /**
+     * Determines whether this controller instance should program the
+     * given {@code deviceId}, based on work partition service and pairDeviceId if one exists.
+     * <p>
+     * Once an instance is elected, it will be the only instance responsible for programming
+     * both devices in the pair until it goes down.
+     *
+     * @param deviceId device identifier to consider for routing
+     * @return true if current instance should handle the routing for given device
      */
     boolean shouldProgram(DeviceId deviceId);
 
@@ -468,4 +483,5 @@ public interface SegmentRoutingService {
      * @return the default internal vlan id
      */
     VlanId getDefaultInternalVlan();
+
 }

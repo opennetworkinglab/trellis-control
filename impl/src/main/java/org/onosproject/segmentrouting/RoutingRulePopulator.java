@@ -1382,8 +1382,8 @@ public class RoutingRulePopulator {
             return;
         }
 
-        if (request && !srManager.mastershipService.isLocalMaster(deviceId)) {
-            log.debug("Not installing port-IP punts - not the master for dev:{} ",
+        if (request && !srManager.shouldProgram(deviceId)) {
+            log.debug("Not installing port-IP punts - not handling programming for dev:{} ",
                       deviceId);
             return;
         }
@@ -1468,8 +1468,8 @@ public class RoutingRulePopulator {
      */
     void populateArpNdpPunts(DeviceId deviceId) {
         // We are not the master just skip.
-        if (!srManager.mastershipService.isLocalMaster(deviceId)) {
-            log.debug("Not installing ARP/NDP punts - not the master for dev:{} ",
+        if (!srManager.shouldProgram(deviceId)) {
+            log.debug("Not installing ARP/NDP punts - not handling programming for dev:{} ",
                       deviceId);
             return;
         }
@@ -1967,7 +1967,7 @@ public class RoutingRulePopulator {
     void updateSpecialVlanFilteringRules(boolean pushVlan, VlanId oldVlanId,
                                          VlanId newVlanId) {
         for (Device dev : srManager.deviceService.getAvailableDevices()) {
-            if (srManager.mastershipService.isLocalMaster(dev.id())) {
+            if (srManager.shouldProgram(dev.id())) {
                 for (Port p : srManager.deviceService.getPorts(dev.id())) {
                     if (!hasIPConfiguration(new ConnectPoint(dev.id(), p.number()))
                             && p.isEnabled()) {

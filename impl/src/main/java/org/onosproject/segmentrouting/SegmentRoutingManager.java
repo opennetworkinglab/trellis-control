@@ -35,7 +35,6 @@ import org.onosproject.cfg.ComponentConfigService;
 import org.onosproject.cluster.ClusterEvent;
 import org.onosproject.cluster.ClusterEventListener;
 import org.onosproject.cluster.ClusterService;
-import org.onosproject.cluster.LeadershipService;
 import org.onosproject.cluster.NodeId;
 import org.onosproject.core.ApplicationId;
 import org.onosproject.core.CoreService;
@@ -198,7 +197,6 @@ import static org.onosproject.segmentrouting.OsgiPropertyConstants.SYMMETRIC_PRO
 public class SegmentRoutingManager implements SegmentRoutingService {
 
     private static Logger log = LoggerFactory.getLogger(SegmentRoutingManager.class);
-    private static final String NOT_MASTER = "Current instance is not the master of {}. Ignore.";
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     private ComponentConfigService compCfgService;
@@ -256,9 +254,6 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
     @Reference(cardinality = ReferenceCardinality.MANDATORY)
     public WorkPartitionService workPartitionService;
-
-    @Reference(cardinality = ReferenceCardinality.MANDATORY)
-    public LeadershipService leadershipService;
 
     @Reference(cardinality = ReferenceCardinality.OPTIONAL,
             policy = ReferencePolicy.DYNAMIC)
@@ -1063,19 +1058,23 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
     @Override
     public Map<Set<DeviceId>, NodeId> getShouldProgram() {
+        return ImmutableMap.of();
+    }
+
+    @Override
+    public Map<DeviceId, Boolean> getShouldProgramCache() {
+        return ImmutableMap.of();
+    }
+
+    @Override
+    public Map<DeviceId, NodeId> getShouldProgramLeaders() {
         return defaultRoutingHandler == null ? ImmutableMap.of() :
                 ImmutableMap.copyOf(defaultRoutingHandler.shouldProgram);
     }
 
     @Override
-    public Map<DeviceId, Boolean> getShouldProgramCache() {
-        return defaultRoutingHandler == null ? ImmutableMap.of() :
-                ImmutableMap.copyOf(defaultRoutingHandler.shouldProgramCache);
-    }
-
-    @Override
     public boolean shouldProgram(DeviceId deviceId) {
-        return defaultRoutingHandler.shouldProgram(deviceId);
+        return defaultRoutingHandler != null && defaultRoutingHandler.shouldProgram(deviceId);
     }
 
     @Override
@@ -1343,7 +1342,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
      */
     public void updateMacVlanTreatment(DeviceId deviceId, MacAddress hostMac,
                                        VlanId hostVlanId, PortNumber port, int nextId) {
-        // Check if we are the king of this device
+        // Check if we are the leader of this device
         // just one instance should perform this update
         if (!defaultRoutingHandler.shouldProgram(deviceId)) {
             log.debug("This instance is not handling the routing towards the "
@@ -1462,6 +1461,16 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                                 + "for available device {}",
                                  event.type(), ((Device) event.subject()).id());
                         processDeviceAdded((Device) event.subject());
+                        /*
+                         * This is a mere heuristic as there is not yet stable mastership in ONOS, and it is based on
+                         * the fact that DEVICE is marked online only if there is a master around. processDeviceAdded
+                         * can be called on config change and link events and there is no check of the availability.
+                         * In this scenarios, we could not have a master and pr is broken as nobody can admin enable
+                         * the ports. We keep in processDeviceAdded the code that is already idempotent
+                         */
+                        if (event.type() == DeviceEvent.Type.DEVICE_AVAILABILITY_CHANGED) {
+                            phasedRecoveryService.init(deviceId);
+                        }
                     } else {
                         if (event.type() == DeviceEvent.Type.DEVICE_ADDED) {
                             // Note: For p4 devices, the device will be added but unavailable at the beginning.
@@ -1584,13 +1593,13 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 } else if (event.type() == MastershipEvent.Type.MASTER_CHANGED) {
                     MastershipEvent me = (MastershipEvent) event;
                     DeviceId deviceId = me.subject();
-                    Optional<DeviceId> pairDeviceId = getPairDeviceId(deviceId);
-                    log.info(" ** MASTERSHIP CHANGED Invalidating shouldProgram cache"
-                            + " for {}/pair={} due to change", deviceId, pairDeviceId);
-                    defaultRoutingHandler.invalidateShouldProgramCache(deviceId);
-                    pairDeviceId.ifPresent(defaultRoutingHandler::invalidateShouldProgramCache);
+                    log.info(" ** Mastership changed check full reroute for {} due to change", deviceId);
                     defaultRoutingHandler.checkFullRerouteForMasterChange(deviceId, me);
 
+                } else if (event.type() == ClusterEvent.Type.INSTANCE_DEACTIVATED ||
+                        event.type() == ClusterEvent.Type.INSTANCE_REMOVED) {
+                    log.info(" ** Cluster event invalidating shouldProgram");
+                    defaultRoutingHandler.invalidateShouldProgram();
                 } else {
                     log.warn("Unhandled event type: {}", event.type());
                 }
@@ -1618,7 +1627,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     }
 
     private void processDeviceAddedInternal(DeviceId deviceId) {
-        // Irrespective of whether the local is a MASTER or not for this device,
+        // Irrespective of whether the local is leading the programming or not for this device,
         // we need to create a SR-group-handler instance. This is because in a
         // multi-instance setup, any instance can initiate forwarding/next-objectives
         // for any switch (even if this instance is a SLAVE or not even connected
@@ -1644,13 +1653,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
             groupHandlerMap.put(deviceId, groupHandler);
         }
 
-        if (mastershipService.isLocalMaster(deviceId)) {
+        if (shouldProgram(deviceId)) {
             defaultRoutingHandler.populatePortAddressingRules(deviceId);
-            defaultRoutingHandler.purgeSeenBeforeRoutes(deviceId);
             DefaultGroupHandler groupHandler = groupHandlerMap.get(deviceId);
             groupHandler.createGroupsFromVlanConfig();
             routingRulePopulator.populateSubnetBroadcastRule(deviceId);
-            phasedRecoveryService.init(deviceId);
         }
 
         appCfgHandler.init(deviceId);
@@ -1684,6 +1691,8 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         defaultRoutingHandler
             .populateRoutingRulesForLinkStatusChange(null, null, device.id(), true);
         defaultRoutingHandler.purgeEcmpGraph(device.id());
+        // Removes routes having as target the device down
+        defaultRoutingHandler.purgeSeenBeforeRoutes(device.id());
 
         // Cleanup all internal groupHandler stores for this device. Should be
         // done after all rerouting or rehashing has been completed
@@ -1723,8 +1732,8 @@ public class SegmentRoutingManager implements SegmentRoutingService {
             lastEdgePortEvent = Instant.now();
         }
 
-        if (!mastershipService.isLocalMaster(device.id()))  {
-            log.debug("Not master for dev:{} .. not handling port updated event "
+        if (shouldProgram(device.id()))  {
+            log.debug("Should not program dev:{} .. not handling port updated event "
                     + "for port {}", device.id(), port.number());
             return;
         }
@@ -1734,7 +1743,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
     /**
      * Adds or remove filtering rules for the given switchport. If switchport is
      * an edge facing port, additionally handles host probing and broadcast
-     * rules. Must be called by local master of device.
+     * rules. Must be called by the instance leading the programming of the device.
      *
      * @param deviceId the device identifier
      * @param port the port to update
@@ -2116,6 +2125,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
             case INSTANCE_REMOVED:
                 log.info("** Cluster event {}", event.type());
                 lastClusterEvent = Instant.now();
+                mainEventExecutor.execute(new InternalEventHandler(event));
                 break;
             default:
                 break;

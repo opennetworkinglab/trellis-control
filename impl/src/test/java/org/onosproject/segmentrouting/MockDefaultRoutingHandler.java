@@ -29,13 +29,16 @@ import java.util.Set;
 public class MockDefaultRoutingHandler extends DefaultRoutingHandler {
     private Map<ConnectPoint, Set<IpPrefix>> subnetTable;
     private Map<MockRoutingTableKey, MockRoutingTableValue> routingTable;
+    private Set<DeviceId> ledDevices;
 
     MockDefaultRoutingHandler(SegmentRoutingManager srManager,
                               Map<ConnectPoint, Set<IpPrefix>> subnetTable,
-                              Map<MockRoutingTableKey, MockRoutingTableValue> routingTable) {
+                              Map<MockRoutingTableKey, MockRoutingTableValue> routingTable,
+                              Set<DeviceId> ledDevices) {
         super(srManager);
         this.subnetTable = subnetTable;
         this.routingTable = routingTable;
+        this.ledDevices = ledDevices;
     }
 
     @Override
@@ -65,7 +68,7 @@ public class MockDefaultRoutingHandler extends DefaultRoutingHandler {
     }
 
     @Override
-    protected boolean shouldProgram(DeviceId deviceId) {
-        return true;
+    public boolean shouldProgram(DeviceId deviceId) {
+        return ledDevices.contains(deviceId);
     }
 }

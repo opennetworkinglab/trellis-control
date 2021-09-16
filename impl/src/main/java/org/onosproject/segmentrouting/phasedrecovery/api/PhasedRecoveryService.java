@@ -56,7 +56,8 @@ public interface PhasedRecoveryService {
     boolean isEnabled();
 
     /**
-     * Initializes a device. Only the master of the device is allowed to do this.
+     * Initializes a device. Only the instance leading the programming
+     * of the device is allowed to do this.
      *
      * @param deviceId device ID
      * @return true if the device is initialized successfully and the caller should proceed,
@@ -65,7 +66,8 @@ public interface PhasedRecoveryService {
     boolean init(DeviceId deviceId);
 
     /**
-     * Resets a device. Only the master of the device is allowed to do this.
+     * Resets a device. Only the instance leading the programming
+     * of the device is allowed to do this.
      *
      * @param deviceId device ID
      * @return true if the device is reset successfully.
@@ -89,7 +91,8 @@ public interface PhasedRecoveryService {
     Phase getPhase(DeviceId deviceId);
 
     /**
-     * Sets given device with given recovery phase. Only the master of the device is allowed to do this.
+     * Sets given device with given recovery phase. Only the instance leading the programming
+     * of the device is allowed to do this.
      *
      * @param deviceId device ID
      * @param newPhase recovery phase

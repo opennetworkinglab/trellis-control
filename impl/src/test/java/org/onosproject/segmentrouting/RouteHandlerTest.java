@@ -137,8 +137,8 @@ public class RouteHandlerTest {
     private static final Set<Host> HOSTS = Sets.newHashSet(H1, H2, H3D, H4);
     private static final Set<Host> HOSTS_ONE_FAIL = Sets.newHashSet(H1, H2, H3S);
     private static final Set<Host> HOSTS_BOTH_FAIL = Sets.newHashSet(H1, H2);
-    // A set of devices of which we have mastership
-    private static final Set<DeviceId> LOCAL_DEVICES = Sets.newHashSet(CP1.deviceId(), CP2.deviceId());
+    // A set of devices of which we have leadership
+    private static final Set<DeviceId> LED_DEVICES = Sets.newHashSet(CP1.deviceId(), CP2.deviceId());
     // A set of interfaces
     private static final InterfaceIpAddress IF_IP1 =
             new InterfaceIpAddress(IpAddress.valueOf("10.0.1.254"), IpPrefix.valueOf("10.0.1.254/24"));
@@ -180,7 +180,8 @@ public class RouteHandlerTest {
         // Initialize Segment Routing Manager
         srManager = new MockSegmentRoutingManager(NEXT_TABLE, ROUTER_MACS);
         srManager.storageService = createMock(StorageService.class);
-        expect(srManager.storageService.consistentMapBuilder()).andReturn(new TestConsistentMap.Builder<>()).anyTimes();
+        expect(srManager.storageService.consistentMapBuilder()).andReturn(
+                new TestConsistentMap.Builder<>()).anyTimes();
         expect(srManager.storageService.consistentMultimapBuilder()).andReturn(
                 new TestConsistentMultimap.Builder<>()).anyTimes();
         replay(srManager.storageService);
@@ -188,9 +189,9 @@ public class RouteHandlerTest {
         srManager.deviceConfiguration = createMock(DeviceConfiguration.class);
         srManager.flowObjectiveService = new MockFlowObjectiveService(BRIDGING_TABLE, NEXT_TABLE);
         srManager.routingRulePopulator = new MockRoutingRulePopulator(srManager, ROUTING_TABLE);
-        srManager.defaultRoutingHandler = new MockDefaultRoutingHandler(srManager, SUBNET_TABLE, ROUTING_TABLE);
+        srManager.defaultRoutingHandler = new MockDefaultRoutingHandler(srManager, SUBNET_TABLE, ROUTING_TABLE,
+                LED_DEVICES);
         srManager.interfaceService = new MockInterfaceService(INTERFACES);
-        srManager.mastershipService = new MockMastershipService(LOCAL_DEVICES);
         hostService = new MockHostService(HOSTS);
         srManager.hostService = hostService;
         srManager.cfgService = mockNetworkConfigRegistry;
@@ -845,24 +846,37 @@ public class RouteHandlerTest {
         expectLastCall().once();
         replay(srManager.deviceConfiguration);
 
+        // We don't lead of:0000000000000004 where RR4 next hop is attached
         re = new RouteEvent(RouteEvent.Type.ALTERNATIVE_ROUTES_CHANGED, RR1, null,
                 Sets.newHashSet(RR2, RR4), Sets.newHashSet(RR1, RR2, RR4));
         routeHandler.processAlternativeRoutesChanged(re);
 
-        assertEquals(2, ROUTING_TABLE.size());
+        assertEquals(1, ROUTING_TABLE.size());
         rtv1 = ROUTING_TABLE.get(new MockRoutingTableKey(CP2.deviceId(), P1));
         assertEquals(M2, rtv1.macAddress);
         assertEquals(V2, rtv1.vlanId);
         assertEquals(CP2.port(), rtv1.portNumber);
-        rtv2 = ROUTING_TABLE.get(new MockRoutingTableKey(CP4.deviceId(), P1));
-        assertEquals(M4, rtv2.macAddress);
-        assertEquals(V4, rtv2.vlanId);
-        assertEquals(CP4.port(), rtv2.portNumber);
+        assertNull(ROUTING_TABLE.get(new MockRoutingTableKey(CP4.deviceId(), P1)));
 
         assertEquals(2, SUBNET_TABLE.size());
         assertTrue(SUBNET_TABLE.get(CP2).contains(P1));
         assertTrue(SUBNET_TABLE.get(CP4).contains(P1));
 
         verify(srManager.deviceConfiguration);
+    }
+
+    @Test
+    public void initOfNonLedDevices() {
+        // We dont lead CP4
+        ROUTE_STORE.put(P1, Sets.newHashSet(RR4));
+
+        routeHandler.init(CP4.deviceId());
+
+        // No routes programmed in the devices
+        assertEquals(0, ROUTING_TABLE.size());
+        assertNull(ROUTING_TABLE.get(new MockRoutingTableKey(CP4.deviceId(), P1)));
+
+        // But we still store the subnets
+        assertEquals(1, SUBNET_TABLE.size());
     }
 }

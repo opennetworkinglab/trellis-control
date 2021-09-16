@@ -88,8 +88,10 @@ public class HostHandlerTest {
     // Host Mac, VLAN
     private static final ProviderId PROVIDER_ID = ProviderId.NONE;
     private static final MacAddress HOST_MAC = MacAddress.valueOf("00:00:00:00:00:01");
+    private static final MacAddress HOST_5_MAC = MacAddress.valueOf("00:00:00:00:00:05");
     private static final VlanId HOST_VLAN_UNTAGGED = VlanId.NONE;
     private static final HostId HOST_ID_UNTAGGED = HostId.hostId(HOST_MAC, HOST_VLAN_UNTAGGED);
+    private static final HostId HOST_5_ID_UNTAGGED = HostId.hostId(HOST_5_MAC, HOST_VLAN_UNTAGGED);
     private static final VlanId HOST_VLAN_TAGGED = VlanId.vlanId((short) 20);
     private static final HostId HOST_ID_TAGGED = HostId.hostId(HOST_MAC, HOST_VLAN_TAGGED);
     // Host IP
@@ -99,6 +101,7 @@ public class HostHandlerTest {
     private static final IpAddress HOST_IP13 = IpAddress.valueOf("10.0.1.3");
     private static final IpAddress HOST_IP14 = IpAddress.valueOf("10.0.1.4");
     private static final IpAddress HOST_IP33 = IpAddress.valueOf("10.0.3.3");
+    private static final IpAddress HOST_IP51 = IpAddress.valueOf("10.0.5.1");
     // Device
     private static final DeviceId DEV1 = DeviceId.deviceId("of:0000000000000001");
     private static final DeviceId DEV2 = DeviceId.deviceId("of:0000000000000002");
@@ -135,7 +138,7 @@ public class HostHandlerTest {
     private static final HostLocation HOST_LOC42 = new HostLocation(CP42, 0);
     private static final ConnectPoint CP39 = new ConnectPoint(DEV3, P9);
     private static final ConnectPoint CP49 = new ConnectPoint(DEV4, P9);
-    // Conenct Point for mastership test
+    // Connect Point for leadership test and move to invalid locations
     private static final ConnectPoint CP51 = new ConnectPoint(DEV5, P1);
     private static final HostLocation HOST_LOC51 = new HostLocation(CP51, 0);
     private static final ConnectPoint CP61 = new ConnectPoint(DEV6, P1);
@@ -199,11 +202,14 @@ public class HostHandlerTest {
     private static final Host HOST1 = new DefaultHost(PROVIDER_ID, HOST_ID_UNTAGGED, HOST_MAC,
             HOST_VLAN_UNTAGGED, Sets.newHashSet(HOST_LOC11, HOST_LOC21), Sets.newHashSet(HOST_IP11),
             false);
+    private static final Host HOST5 = new DefaultHost(PROVIDER_ID, HOST_5_ID_UNTAGGED, HOST_5_MAC,
+            HOST_VLAN_UNTAGGED, Sets.newHashSet(HOST_LOC51), Sets.newHashSet(HOST_IP51),
+            false);
 
     // A set of hosts
-    private static final Set<Host> HOSTS = Sets.newHashSet(HOST1);
-    // A set of devices of which we have mastership
-    private static final Set<DeviceId> LOCAL_DEVICES = Sets.newHashSet(DEV1, DEV2, DEV3, DEV4);
+    private static final Set<Host> HOSTS = Sets.newHashSet(HOST1, HOST5);
+    // A set of devices of which we have leadership
+    private static final Set<DeviceId> LED_DEVICES = Sets.newHashSet(DEV1, DEV2, DEV3, DEV4);
     // A set of interfaces
     private static final Set<Interface> INTERFACES = Sets.newHashSet(INTF11, INTF12, INTF13, INTF21,
             INTF22, INTF31, INTF32, INTF33, INTF39, INTF41, INTF42, INTF49);
@@ -233,7 +239,8 @@ public class HostHandlerTest {
         // Initialize Segment Routing Manager
         SegmentRoutingManager srManager = new MockSegmentRoutingManager(NEXT_TABLE, Maps.newHashMap());
         srManager.storageService = createMock(StorageService.class);
-        expect(srManager.storageService.consistentMapBuilder()).andReturn(new TestConsistentMap.Builder<>()).anyTimes();
+        expect(srManager.storageService.consistentMapBuilder()).andReturn(
+                new TestConsistentMap.Builder<>()).anyTimes();
         expect(srManager.storageService.consistentMultimapBuilder()).andReturn(
                 new TestConsistentMultimap.Builder<>()).anyTimes();
         replay(srManager.storageService);
@@ -241,9 +248,9 @@ public class HostHandlerTest {
         srManager.deviceConfiguration = new DeviceConfiguration(srManager);
         srManager.flowObjectiveService = new MockFlowObjectiveService(BRIDGING_TABLE, NEXT_TABLE);
         srManager.routingRulePopulator = new MockRoutingRulePopulator(srManager, ROUTING_TABLE);
-        srManager.defaultRoutingHandler = new MockDefaultRoutingHandler(srManager, SUBNET_TABLE, ROUTING_TABLE);
+        srManager.defaultRoutingHandler = new MockDefaultRoutingHandler(srManager, SUBNET_TABLE,
+                ROUTING_TABLE, LED_DEVICES);
         srManager.interfaceService = new MockInterfaceService(INTERFACES);
-        srManager.mastershipService = new MockMastershipService(LOCAL_DEVICES);
         srManager.hostService = new MockHostService(HOSTS);
         srManager.cfgService = mockNetworkConfigRegistry;
         mockLocationProbingService = new MockHostProbingService();
@@ -1015,5 +1022,16 @@ public class HostHandlerTest {
 
         assertEquals(Sets.newHashSet(HOST_LOC11, HOST_LOC12), hostHandler.effectiveLocations(regularHost));
         assertEquals(Sets.newHashSet(HOST_LOC21, HOST_LOC22), hostHandler.effectiveLocations(auxHost));
+    }
+
+    @Test
+    public void initOfNonLedDevices() {
+        hostHandler.init(DEV5);
+        assertEquals(0, ROUTING_TABLE.size());
+        assertEquals(0, BRIDGING_TABLE.size());
+
+        hostHandler.init(DEV6);
+        assertEquals(0, ROUTING_TABLE.size());
+        assertEquals(0, BRIDGING_TABLE.size());
     }
 }

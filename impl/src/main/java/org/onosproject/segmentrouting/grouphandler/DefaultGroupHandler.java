@@ -250,9 +250,9 @@ public class DefaultGroupHandler {
     /**
      * Checks all groups in the src-device of link for neighbor sets that include
      * the dst-device of link, and edits the hash groups according to link up
-     * or down. Should only be called by the master instance of the src-switch
-     * of link. Typically used when there are no route-path changes due to the
-     * link up or down, as the ECMPspg does not change.
+     * or down. Should only be called by the instance leading the programming of
+     * the src-switch of link. Typically used when there are no route-path
+     * changes due to the link up or down, as the ECMPspg does not change.
      *
      * @param link the infrastructure link that has gone down or come up
      * @param linkDown true if link has gone down
@@ -461,9 +461,9 @@ public class DefaultGroupHandler {
     /**
      * Checks all the hash-groups in the target-switch meant for the destination
      * switch, and either adds or removes buckets to make the neighbor-set
-     * match the given next-hops. Typically called by the master instance of the
-     * destination switch, which may be different from the master instance of the
-     * target switch where hash-group changes are made.
+     * match the given next-hops. Typically called by the instance leading the programming
+     * of the destination switch, which may be different from the instance leading the
+     * programming of the target switch where hash-group changes are made.
      *
      * @param targetSw the switch in which the hash groups will be edited
      * @param nextHops the current next hops for the target switch to reach
@@ -685,7 +685,8 @@ public class DefaultGroupHandler {
 
     /**
      * Adds or removes a port that has been configured with a vlan to a broadcast group
-     * for bridging. Should only be called by the master instance for this device.
+     * for bridging. Should only be called by the instance leading the programming
+     * for this device.
      *
      * @param port the port on this device that needs to be added/removed to a bcast group
      * @param vlanId the vlan id corresponding to the broadcast domain/group
@@ -1718,22 +1719,13 @@ public class DefaultGroupHandler {
             this.nextId = null;
         }
 
-        BucketCorrector(Integer nextId) {
-            this.nextId = nextId;
-        }
-
         @Override
         public void run() {
-            if (!srManager.mastershipService.isLocalMaster(deviceId)) {
-                return;
-            }
             DefaultRoutingHandler rh = srManager.getRoutingHandler();
-            if (rh == null) {
+            if (rh == null || !rh.isRoutingStable() || !rh.shouldProgram(deviceId)) {
                 return;
             }
-            if (!rh.isRoutingStable()) {
-                return;
-            }
+
             rh.acquireRoutingLock();
             try {
                 log.trace("running bucket corrector for dev: {}", deviceId);
