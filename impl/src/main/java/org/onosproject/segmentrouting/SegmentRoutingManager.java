@@ -1732,7 +1732,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
             lastEdgePortEvent = Instant.now();
         }
 
-        if (shouldProgram(device.id()))  {
+        if (!shouldProgram(device.id()))  {
             log.debug("Should not program dev:{} .. not handling port updated event "
                     + "for port {}", device.id(), port.number());
             return;
