@@ -1314,17 +1314,23 @@ public class DefaultRoutingHandler {
     }
 
     /**
-     * Revoke rules of given subnet in all edge switches.
+     * Revoke rules of given subnet in all edge switches. Use the
+     * destination switch (if it is provided) to provide coordination
+     * among the instances. Otherwise, only the leader of the target
+     * switch can remove this subnet.
      *
      * @param subnets subnet being removed
+     * @param destSw destination switch. It is null when it is called from RouteHandler,
+     *               in this context we don't have a way to remember the old locations.
      * @return true if succeed
      */
-    protected boolean revokeSubnet(Set<IpPrefix> subnets) {
+    protected boolean revokeSubnet(Set<IpPrefix> subnets, DeviceId destSw) {
         DeviceId targetSw;
         List<Future<Boolean>> futures = Lists.newArrayList();
         for (Device sw : srManager.deviceService.getAvailableDevices()) {
             targetSw = sw.id();
-            if (shouldProgram(targetSw)) {
+            // In some calls, we dont know anymore the destination switch
+            if ((destSw != null && shouldProgram(destSw)) || shouldProgram(targetSw)) {
                 futures.add(routePopulators.submit(new RevokeSubnet(targetSw, subnets)));
             } else {
                 futures.add(CompletableFuture.completedFuture(true));

@@ -154,7 +154,8 @@ public class RouteHandler {
         // Revoke subnet from all locations and reset oldRoutes such that system will be reprogrammed from scratch
         if (oldRoutes.size() > 2) {
             log.info("Revoke subnet {} and reset oldRoutes");
-            srManager.defaultRoutingHandler.revokeSubnet(allPrefixes);
+            // FIXME remove routes more precisely by memorizing the old locations
+            srManager.defaultRoutingHandler.revokeSubnet(allPrefixes, null);
             oldRoutes = Sets.newHashSet();
         }
 
@@ -213,7 +214,8 @@ public class RouteHandler {
             allPrefixes.add(route.prefix());
         });
         log.debug("RouteRemoved. revokeSubnet {}", allPrefixes);
-        srManager.defaultRoutingHandler.revokeSubnet(allPrefixes);
+        // FIXME remove routes more precisely by memorizing the old locations
+        srManager.defaultRoutingHandler.revokeSubnet(allPrefixes, null);
 
         routes.forEach(route -> {
             IpPrefix prefix = route.prefix();

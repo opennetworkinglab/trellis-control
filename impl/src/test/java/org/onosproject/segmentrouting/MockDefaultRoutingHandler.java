@@ -56,7 +56,7 @@ public class MockDefaultRoutingHandler extends DefaultRoutingHandler {
     }
 
     @Override
-    protected boolean revokeSubnet(Set<IpPrefix> subnets) {
+    protected boolean revokeSubnet(Set<IpPrefix> subnets, DeviceId deviceId) {
         for (Map.Entry<ConnectPoint, Set<IpPrefix>> entry : subnetTable.entrySet()) {
             entry.getValue().removeAll(subnets);
             if (entry.getValue().isEmpty()) {

@@ -1656,7 +1656,13 @@ public class McastHandler {
         // Iterates over the route and updates properly the filtering objective on the source device.
         srManager.multicastRouteService.getRoutes().forEach(mcastRoute -> {
             log.debug("Update filter for {}", mcastRoute.group());
-            if (!mcastUtils.isLeader(mcastRoute.group())) {
+            /*
+             * Only skip filtering objective programming when current instance is
+             * not the leader of the Multicast group nor the leader of the device
+             * FIXME revisit multicast group programming responsibility or
+             *  call updateFilterToDeviceInternal from a different context
+             */
+            if (!mcastUtils.isLeader(mcastRoute.group()) && !srManager.shouldProgram(deviceId)) {
                 log.debug("Skip {} due to lack of leadership", mcastRoute.group());
                 return;
             }

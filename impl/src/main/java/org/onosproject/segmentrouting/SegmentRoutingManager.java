@@ -2155,9 +2155,15 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
             Interface intf = intfs.stream().findFirst().get();
             Interface prevIntf = prevIntfs.stream().findFirst().get();
-
             DeviceId deviceId = intf.connectPoint().deviceId();
             PortNumber portNum = intf.connectPoint().port();
+
+            if (!shouldProgram(deviceId)) {
+                log.debug("Not leading the programming of {} skip update interface {}",
+                        deviceId, intf);
+                return;
+            }
+
             // We need to do nexthop update al least one time for each
             // interface config change. There is no difference when it is done;
             boolean updateNexthop = false;
@@ -2394,7 +2400,7 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
         if (!subnetsToBeRevoked.isEmpty()) {
             log.debug("Removing subnets for connectPoint: {}, subnets: {}", cp, subnetsToBeRevoked);
-            defaultRoutingHandler.revokeSubnet(subnetsToBeRevoked);
+            defaultRoutingHandler.revokeSubnet(subnetsToBeRevoked, cp.deviceId());
         }
 
         // 2. Interface IP punts
@@ -2436,13 +2442,13 @@ public class SegmentRoutingManager implements SegmentRoutingService {
         if (!subnetsToBePopulated.isEmpty()) {
             log.debug("Adding subnets for connectPoint: {}, subnets: {}", cp, subnetsToBePopulated);
 
-            // check if pair-device has the same subnet configured?
+            // check if pair-device has the same subnet configured
             Optional<DeviceId> pairDevice = getPairDeviceId(cp.deviceId());
             if (pairDevice.isPresent()) {
                 Set<IpPrefix> pairDeviceIpPrefix = getDeviceSubnetMap().get(pairDevice.get());
 
                 Set<IpPrefix>  subnetsToBePopulatedAsDualHomed = subnetsToBePopulated.stream()
-                        .filter(ipPrefix -> pairDeviceIpPrefix.contains(ipPrefix))
+                        .filter(pairDeviceIpPrefix::contains)
                         .collect(Collectors.toSet());
                 Set<IpPrefix> subnetsToBePopulatedAsSingleHomed = Sets.difference(subnetsToBePopulated,
                         subnetsToBePopulatedAsDualHomed);
