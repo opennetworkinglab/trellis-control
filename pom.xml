@@ -27,7 +27,7 @@
 
     <groupId>org.onosproject</groupId>
     <artifactId>segmentrouting</artifactId>
-    <version>3.1.0-SNAPSHOT</version>
+    <version>3.1.0</version>
     <packaging>pom</packaging>
     <url>http://trellisfabric.org</url>
     <description>Trellis control</description>
