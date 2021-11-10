@@ -2115,6 +2115,11 @@ public class SegmentRoutingManager implements SegmentRoutingService {
 
         @Override
         public void event(ClusterEvent event) {
+            if (event.instanceType() == ClusterEvent.InstanceType.STORAGE) {
+                log.debug("Skipping cluster event for {}", event.subject().id().id());
+                return;
+            }
+
             switch (event.type()) {
             case INSTANCE_ACTIVATED:
             case INSTANCE_ADDED:
