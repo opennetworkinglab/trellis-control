@@ -68,11 +68,13 @@ public class BlackHoleCommand extends AbstractShellCommand {
                 blackHoleIps = Sets.newConcurrentHashSet(appConfig.blackholeIPs());
                 blackHoleIps.add(IpPrefix.valueOf(prefix));
                 appConfig.setBalckholeIps(blackHoleIps);
+                appConfig.apply();
                 break;
             case "remove":
                 blackHoleIps = Sets.newConcurrentHashSet(appConfig.blackholeIPs());
                 blackHoleIps.remove(IpPrefix.valueOf(prefix));
                 appConfig.setBalckholeIps(blackHoleIps);
+                appConfig.apply();
                 break;
             default:
                 throw new UnsupportedOperationException("Unknown operation " + op);
