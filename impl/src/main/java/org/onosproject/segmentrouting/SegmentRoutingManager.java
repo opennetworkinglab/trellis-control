@@ -103,6 +103,7 @@ import org.onosproject.segmentrouting.mcast.McastHandler;
 import org.onosproject.segmentrouting.mcast.McastRole;
 import org.onosproject.segmentrouting.mcast.McastRoleStoreKey;
 import org.onosproject.segmentrouting.mcast.McastStoreKey;
+import org.onosproject.segmentrouting.phasedrecovery.api.Phase;
 import org.onosproject.segmentrouting.phasedrecovery.api.PhasedRecoveryService;
 import org.onosproject.segmentrouting.pwaas.DefaultL2Tunnel;
 import org.onosproject.segmentrouting.pwaas.DefaultL2TunnelDescription;
@@ -1951,6 +1952,22 @@ public class SegmentRoutingManager implements SegmentRoutingService {
                 log.info("Reacting to config changes after buffer delay");
                 for (Device device : deviceService.getDevices()) {
                     processDeviceAdded(device);
+                    // Config changes can happen later and not close to the startup - let's react
+                    // only if the phased recovery is not running and we should program the device
+                    if (shouldProgram(device.id()) &&
+                            phasedRecoveryService.getPhase(device.id()) == Phase.EDGE) {
+                        // This should fix the unicast fwd
+                        initHost(device.id());
+                        initRoute(device.id());
+                        // This should fix port based tables, unicast and bdrcast fwd
+                        for (Port port : deviceService.getPorts(device.id())) {
+                            processPortUpdatedInternal(device, port);
+                        }
+                    } else {
+                        log.debug("Skipping init of hosts and routes after config changes" +
+                                          " - not handling programming for dev:{} or phased" +
+                                          " recovery is still running", device.id());
+                    }
                 }
                 defaultRoutingHandler.startPopulationProcess();
             }
